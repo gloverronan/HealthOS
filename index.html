@@ -8,16 +8,24 @@
   <meta name="theme-color" content="#020617">
   <title>Health OS</title>
 
+  <!-- Tailwind via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] } } } }
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
+  <!-- React 18 -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
+  <!-- FIREBASE JS SDKS (COMPATIBILITY VERSION) -->
+  <!-- These must load successfully for the persistence to work -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+  
   <style>
     body { background: #020617; color: white; overscroll-behavior: none; }
     #loader { position: fixed; inset: 0; background: #020617; z-index: 9999; display: flex; align-items: center; justify-content: center; transition: opacity 0.7s; }
@@ -31,6 +39,7 @@
   <div class="text-center">
     <div class="w-16 h-16 border-4 border-slate-800 border-t-cyan-500 rounded-full animate-spin mb-6"></div>
     <div class="text-3xl font-black tracking-tighter">Health OS</div>
+    <div class="text-sm text-slate-500 mt-2 tracking-widest" id="loader-status">CONNECTING</div>
   </div>
 </div>
 
@@ -39,29 +48,231 @@
 <script type="text/babel">
   const { useState, useEffect, useMemo } = React;
 
-  const load = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) || def; } catch { return def; } };
-  const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+  // --- LOCAL STORAGE HELPERS (FOR KEYS AND CONFIG) ---
+  const loadItem = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) || def; } catch { return def; } };
+  const saveItem = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+  const loadKey = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
+  const saveKey = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
   const GOALS = { calories: 2350, protein: 180, carbs: 250 };
-  let GEMINI_KEY = load('hos_gemini_key', '');
+  let GEMINI_KEY = loadKey('hos_gemini_key'); 
 
   const DEFAULT_WORKOUTS = [
     { id: "push", name: "Push", color: "#ec4899", exercises: ["Bench Press", "Overhead Press", "Tricep Extensions"] },
     { id: "legs", name: "Legs", color: "#3b82f6", exercises: ["Squat", "Romanian Deadlift", "Calf Raises"] },
     { id: "pull", name: "Pull", color: "#10b981", exercises: ["Pull-ups", "Barbell Row", "Bicep Curls"] }
   ];
+  
+  // --- FIREBASE GLOBALS ---
+  let DB = null;
+  let USER_ID = null;
 
+  // --- SETTINGS MODAL ---
+  const SettingsModal = ({ isVisible, onClose, onSave, currentKey, currentDbConfig }) => {
+    const [keyInput, setKeyInput] = useState(currentKey);
+    const [dbConfig, setDbConfig] = useState(currentDbConfig);
+    const [isDbChecking, setIsDbChecking] = useState(false);
+
+    if (!isVisible) return null;
+
+    const checkKey = async (key) => {
+        if (!key.trim()) return true; // Allows clearing the key
+        try {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${key}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: "test" }] }] })
+            });
+            return res.ok;
+        } catch { return false; }
+    };
+
+    const checkDbValidity = async (config) => {
+        if (!config.projectId) return true; // Allows skipping DB setup
+        try {
+            // Use a unique name for the temporary app to avoid conflicts
+            const tempApp = firebase.initializeApp(config, 'temp_check_' + Date.now());
+            const tempDb = tempApp.firestore();
+            await tempDb.collection('metadata').doc('test').get();
+            tempApp.delete();
+            return true;
+        } catch (e) {
+            console.error("DB Check Failed:", e);
+            return false;
+        }
+    };
+
+    const handleSave = async () => {
+        setIsDbChecking(true);
+        
+        let keyStatus = true;
+        if (keyInput.trim()) {
+            keyStatus = await checkKey(keyInput);
+        }
+
+        let dbStatus = true;
+        if (dbConfig.projectId) {
+            dbStatus = await checkDbValidity(dbConfig);
+        }
+
+        setIsDbChecking(false);
+
+        if (keyStatus && dbStatus) {
+            onSave(keyInput, dbConfig, 'Settings saved and verified!');
+        } else {
+            onSave(keyInput, dbConfig, 'Validation failed: ' + (!keyStatus ? 'Gemini Key Invalid. ' : '') + (!dbStatus ? 'Database Config Invalid.' : ''), 'error');
+        }
+    };
+
+    const updateConfig = (field, value) => {
+        setDbConfig(prev => ({...prev, [field]: value}));
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in" onClick={onClose}>
+        <div className className="bg-slate-900/90 border border-slate-700 p-6 rounded-xl w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
+          <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pb-2">Application Settings</h3>
+          
+          <p className="text-sm text-cyan-400 mb-4 font-bold">Persistence (Firestore Config)</p>
+          <div className="space-y-3 mb-6">
+            {['apiKey', 'authDomain', 'projectId', 'appId'].map(field => (
+                <input
+                    key={field}
+                    type="text"
+                    className="w-full bg-slate-950 text-white p-3 rounded-xl border border-slate-700 outline-none focus:border-cyan-500 text-sm"
+                    placeholder={`Firebase Config: ${field}`}
+                    value={dbConfig[field] || ''}
+                    onChange={e => updateConfig(field, e.target.value)}
+                />
+            ))}
+            <p className="text-xs text-slate-500 pt-2">Input your config parameters here to enable persistent cloud storage. **Security Rules must be set in Firebase Console.**</p>
+          </div>
+          
+          <p className="text-sm text-emerald-400 mb-4 font-bold border-t border-slate-700 pt-4">AI Calorie Estimation (Gemini)</p>
+          <input
+            type="password"
+            className="w-full bg-slate-950 text-white p-3 rounded-xl border border-slate-700 mb-4 outline-none focus:border-emerald-500"
+            placeholder="Gemini API Key"
+            value={keyInput}
+            onChange={e => setKeyInput(e.target.value)}
+            disabled={isDbChecking}
+          />
+          
+          <button
+            onClick={handleSave}
+            disabled={isDbChecking}
+            className="w-full bg-cyan-600 py-3 rounded-xl font-bold text-lg hover:bg-cyan-500 transition-colors disabled:opacity-50 mt-4"
+          >
+            {isDbChecking ? 'Verifying...' : 'Verify & Save All Settings'}
+          </button>
+          <div className="text-center mt-4">
+            <button onClick={onClose} className="text-slate-500 hover:text-white text-sm">Close</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
   const App = () => {
     const [tab, setTab] = useState('summary');
-    const [foodLog, setFoodLog] = useState(load('hos_food', []));
-    const [gymLog, setGymLog] = useState(load('hos_gym', []));
-    const [cardioLog, setCardioLog] = useState(load('hos_cardio', []));
-    const [workouts, setWorkouts] = useState(load('hos_workouts', DEFAULT_WORKOUTS));
+    const [foodLog, setFoodLog] = useState([]);
+    const [gymLog, setGymLog] = useState([]);
+    const [cardioLog, setCardioLog] = useState([]);
+    const [workouts, setWorkouts] = useState(loadItem('hos_workouts', DEFAULT_WORKOUTS));
     const [toast, setToast] = useState(null);
     const [showSettings, setShowSettings] = useState(false);
     const [isChecking, setIsChecking] = useState(false);
+    
+    // Persistence States
+    const [dbConfig, setDbConfig] = useState(loadItem('hos_db_config', {}));
+    const [isDbInitialized, setIsDbInitialized] = useState(false);
+    const [userId, setUserId] = useState(null);
+    const isReady = isDbInitialized;
 
     const today = new Date().toISOString().split('T')[0];
+
+    const showToast = (msg, type = 'success') => {
+      setToast({ msg, type });
+      setTimeout(() => setToast(null), 3000);
+    };
+
+    // --- FIREBASE INITIALIZATION ---
+    useEffect(() => {
+        if (!dbConfig.projectId || typeof firebase === 'undefined') {
+            document.getElementById('loader-status').innerText = 'SETUP REQUIRED';
+            return;
+        }
+
+        const initializeDb = () => {
+             try {
+                // Ensure the app isn't already running under this ID
+                const existingApp = firebase.apps.find(app => app.name === dbConfig.projectId);
+                if (existingApp) {
+                    existingApp.delete(); // Clear old instance to restart safely
+                }
+
+                const app = firebase.initializeApp(dbConfig, dbConfig.projectId);
+                DB = app.firestore();
+                DB.settings({ timestampsInSnapshots: true });
+
+                firebase.auth().signInAnonymously()
+                    .then(userCredential => {
+                        USER_ID = userCredential.user.uid;
+                        setUserId(USER_ID);
+                        setIsDbInitialized(true);
+                        document.getElementById('loader-status').innerText = 'CONNECTED';
+                    })
+                    .catch(e => {
+                        console.error("Auth Failed:", e);
+                        document.getElementById('loader-status').innerText = 'AUTH FAILED';
+                    });
+            } catch (e) {
+                console.error("Firebase Init Error:", e);
+                document.getElementById('loader-status').innerText = 'CONFIG ERROR';
+            }
+        };
+
+        initializeDb();
+    }, [dbConfig]);
+
+    // --- FIREBASE DATA LISTENERS ---
+    useEffect(() => {
+        if (!isReady || !userId) return;
+
+        const logRef = DB.collection(`users/${userId}/`);
+        
+        // Listener for Food Logs
+        const unsubFood = logRef.doc('food_logs').collection('logs').onSnapshot(snapshot => {
+            setFoodLog(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || b.id) - (a.timestamp?.seconds || a.id)));
+        });
+        // Listener for Gym Logs
+        const unsubGym = logRef.doc('gym_logs').collection('logs').onSnapshot(snapshot => {
+            setGymLog(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || b.id) - (a.timestamp?.seconds || a.id)));
+        });
+        // Listener for Cardio Logs
+        const unsubCardio = logRef.doc('cardio_logs').collection('logs').onSnapshot(snapshot => {
+            setCardioLog(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || b.id) - (a.timestamp?.seconds || a.id)));
+        });
+
+        return () => { unsubFood(); unsubGym(); unsubCardio(); };
+    }, [isReady, userId]);
+
+    // --- LOCAL STORAGE EFFECTS ---
+    useEffect(() => { saveItem('hos_workouts', workouts); }, [workouts]);
+    // GEMINI_KEY and dbConfig save is handled inside the modal logic for verification
+
+    useEffect(() => {
+      // Hide loader once app is ready or config is missing (requiring user input)
+      if (isReady || !dbConfig.projectId) {
+        const loader = document.getElementById('loader');
+        const root = document.getElementById('root');
+        setTimeout(() => {
+          loader.style.opacity = '0';
+          root.style.opacity = '1';
+          setTimeout(() => loader.remove(), 700);
+        }, 500);
+      }
+    }, [isReady, dbConfig]);
+
 
     const todaysData = useMemo(() => {
       const food = foodLog.filter(f => f.date === today);
@@ -77,52 +288,17 @@
       return { food, gym, cardio, totals };
     }, [foodLog, gymLog, cardioLog, today]);
 
-    const showToast = (msg, type = 'success') => {
-      setToast({ msg, type });
-      setTimeout(() => setToast(null), 3000);
-    };
-
-    const checkKey = async (key) => {
-      if (!key.trim()) return false;
-      try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${key}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: "test" }] }] })
-        });
-        return res.ok;
-      } catch { return false; }
-    };
-
-    const saveKey = async (key) => {
-      setIsChecking(true);
-      const valid = await checkKey(key);
-      setIsChecking(false);
-      if (valid || !key.trim()) {
-        GEMINI_KEY = key.trim();
-        save('hos_gemini_key', GEMINI_KEY);
+    const handleSettingsSave = (gemini, dbCfg, msg, type) => {
+        GEMINI_KEY = gemini;
+        setDbConfig(dbCfg);
+        // Force re-initialization if DB config changed
+        if (dbCfg.projectId !== dbConfig.projectId || dbCfg.apiKey !== dbConfig.apiKey) {
+            setIsDbInitialized(false);
+        }
         setShowSettings(false);
-        showToast(valid ? 'Key verified!' : 'Key cleared');
-      } else {
-        showToast('Invalid key', 'error');
-      }
+        showToast(msg, type);
     };
 
-    useEffect(() => {
-      save('hos_food', foodLog);
-      save('hos_gym', gymLog);
-      save('hos_cardio', cardioLog);
-      save('hos_workouts', workouts);
-    }, [foodLog, gymLog, cardioLog, workouts]);
-
-    useEffect(() => {
-      const loader = document.getElementById('loader');
-      const root = document.getElementById('root');
-      setTimeout(() => {
-        loader.style.opacity = '0';
-        root.style.opacity = '1';
-        setTimeout(() => loader.remove(), 700);
-      }, 500);
-    }, []);
 
     return (
       <div className="max-w-md mx-auto min-h-screen pb-32 px-6 pt-8">
@@ -132,22 +308,14 @@
           </div>
         )}
 
-        {showSettings && (
-          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-6" onClick={() => setShowSettings(false)}>
-            <div className="bg-slate-900 p-8 rounded-2xl border border-slate-700 max-w-sm w-full" onClick={e => e.stopPropagation()}>
-              <h3 className="text-2xl font-bold mb-4">Gemini API Key</h3>
-              <input type="password" className="w-full bg-slate-950 px-4 py-3 rounded-xl border border-slate-700 mb-4" 
-                     defaultValue={GEMINI_KEY} id="keyInput" />
-              <button onClick={() => saveKey(document.getElementById('keyInput').value)} disabled={isChecking}
-                      className="w-full bg-emerald-600 py-4 rounded-xl font-bold disabled:opacity-50">
-                {isChecking ? 'Checking...' : 'Save & Verify'}
-              </button>
-              <a href="https://aistudio.google.com/app/apikey" target="_blank" className="block text-center mt-4 text-cyan-400 text-sm underline">
-                Get free key →
-              </a>
-            </div>
-          </div>
-        )}
+        <SettingsModal 
+            isVisible={showSettings} 
+            onClose={() => setShowSettings(false)} 
+            onSave={handleSettingsSave} 
+            currentKey={GEMINI_KEY} 
+            currentDbConfig={dbConfig}
+            isChecking={isChecking}
+        />
 
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-5xl font-black">
@@ -161,9 +329,9 @@
         </div>
 
         {tab === 'summary' && <SummaryTab data={todaysData} allFood={foodLog} allGym={gymLog} allCardio={cardioLog} />}
-        {tab === 'food' && <FoodTab data={todaysData} setFoodLog={setFoodLog} showToast={showToast} />}
-        {tab === 'gym' && <GymTab workouts={workouts} setWorkouts={setWorkouts} setGymLog={setGymLog} showToast={showToast} />}
-        {tab === 'cardio' && <CardioTab setCardioLog={setCardioLog} showToast={showToast} />}
+        {tab === 'food' && <FoodTab data={todaysData} isReady={isReady} userId={userId} showToast={showToast} />}
+        {tab === 'gym' && <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} />}
+        {tab === 'cardio' && <CardioTab isReady={isReady} userId={userId} showToast={showToast} />}
 
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-2xl border border-slate-800 rounded-full shadow-2xl flex z-50">
           <button onClick={() => setTab('summary')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'summary' ? 'bg-cyan-600 text-white' : 'text-slate-500'}`}>Summary</button>
@@ -186,6 +354,9 @@
     return (
       <div className="relative w-64 h-64 mx-auto mb-8">
         <svg viewBox="0 0 256 256">
+          <circle cx="128" cy="128" r="110" stroke="#1e293b" strokeWidth="14" fill="none" opacity="0.3"/>
+          <circle cx="128" cy="128" r="90" stroke="#1e293b" strokeWidth="14" fill="none" opacity="0.3"/>
+          <circle cx="128" cy="128" r="70" stroke="#1e293b" strokeWidth="14" fill="none" opacity="0.3"/>
           <Ring r={110} progress={pct(cals, GOALS.calories)} color="#10b981" />
           <Ring r={90} progress={pct(prot, GOALS.protein)} color="#3b82f6" />
           <Ring r={70} progress={pct(carb, GOALS.carbs)} color="#f59e0b" />
@@ -201,7 +372,10 @@
   };
 
   const SummaryTab = ({ data, allFood, allGym, allCardio }) => {
-    const dates = [...new Set([...allFood.map(f => f.date), ...allGym.map(g => g.date), ...allCardio.map(c => c.date)])].sort().reverse();
+    const dates = useMemo(() => {
+        const uniqueDates = [...new Set([...allFood.map(f => f.date), ...allGym.map(g => g.date), ...allCardio.map(c => c.date)])];
+        return uniqueDates.filter(d => d).sort().reverse();
+    }, [allFood, allGym, allCardio]);
 
     return (
       <div className="space-y-8">
@@ -216,7 +390,6 @@
             const dayFood = allFood.filter(f => f.date === date);
             const dayGym = allGym.filter(g => g.date === date);
             const dayCardio = allCardio.filter(c => c.date === date);
-            if (!dayFood.length && !dayGym.length && !dayCardio.length) return null;
 
             return (
               <div key={date} className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 border border-slate-700">
@@ -232,52 +405,100 @@
     );
   };
 
-  const FoodTab = ({ data, setFoodLog, showToast }) => (
-    <>
-      <ActivityRings {...data.totals} />
-      <GeminiFoodEntry onAdd={(item) => { setFoodLog(prev => [item, ...prev]); showToast('Added!'); }} showToast={showToast} />
-      <div className="space-y-4">
-        {data.food.map(item => (
-          <div key={item.id} className="bg-slate-900/80 backdrop-blur-xl rounded-xl p-5 flex justify-between items-center border border-slate-700">
-            <div>
-              <div className="font-bold">{item.name}</div>
-              <div className="text-sm text-slate-500">{item.prot}g P • {item.carb}g C • {item.fat}g F</div>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-black text-emerald-400">{item.cals}</div>
-              <button onClick={() => setFoodLog(prev => prev.filter(i => i.id !== item.id))} className="text-red-500 text-sm">Remove</button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
-  );
+  const FoodTab = ({ data, isReady, userId, showToast }) => {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Function to delete item from Firestore
+    const deleteFoodItem = async (docId) => {
+        if (!isReady || !userId) return showToast('Database not ready.', 'error');
+        try {
+            await DB.collection(`users/${userId}/food_logs/logs`).doc(docId).delete();
+            showToast('Item deleted!', 'success');
+        } catch (e) {
+            showToast('Deletion failed.', 'error');
+            console.error("Error deleting document:", e);
+        }
+    };
 
-  const GeminiFoodEntry = ({ onAdd, showToast }) => {
+    return (
+      <>
+        <ActivityRings {...data.totals} />
+        <GeminiFoodEntry isReady={isReady} userId={userId} showToast={showToast} />
+        <div className="space-y-4">
+          {!isReady && <div className="text-center text-slate-500 py-6">Waiting for Database connection...</div>}
+          {data.food.map(item => (
+            <div key={item.id} className="bg-slate-900/80 backdrop-blur-xl rounded-xl p-5 flex justify-between items-center border border-slate-700">
+              <div>
+                <div className="font-bold">{item.name}</div>
+                <div className="text-sm text-slate-500">{item.prot}g P • {item.carb}g C • {item.fat}g F</div>
+              </div>
+              <div className="text-right flex items-center gap-4">
+                <div className="text-2xl font-black text-emerald-400">{item.cals}</div>
+                <button onClick={() => deleteFoodItem(item.id)} className="text-red-500 text-lg">×</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  };
+
+  const GeminiFoodEntry = ({ isReady, userId, showToast }) => {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null);
+    const today = new Date().toISOString().split('T')[0];
 
     const analyze = async () => {
       if (!input.trim()) return;
       if (!GEMINI_KEY) return showToast('Set API key in settings first', 'error');
       setLoading(true);
       try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: `Return ONLY valid JSON (no markdown): {"name":"string","cals":number,"prot":number,"carb":number,"fat":number}\nFood: ${input}` }] }]
+            contents: [{ parts: [{ text: `Return ONLY valid JSON (no markdown): {"name":"string","cals":number,"prot":number,"carb":number,"fat":number}. Food: ${input}` }] }]
           })
         });
+        
         const data = await res.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const json = JSON.parse(text.replace(/```/g, '').trim());
+        const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (!responseText) throw new Error('Empty response from AI.');
+        
+        const jsonString = responseText.trim().replace(/```json|```/g, '');
+        const json = JSON.parse(jsonString);
         setResult(json);
+
       } catch (e) {
-        showToast('AI failed – check key or input', 'error');
+        showToast('AI failed. Check key/input.', 'error');
+        console.error("Gemini Failure:", e);
       }
       setLoading(false);
+    };
+
+    const add = async () => {
+        if (!result || !isReady || !userId) return showToast('Database not ready.', 'error');
+        const baseRef = DB.collection(`users/${userId}/food_logs/logs`);
+        
+        try {
+            await baseRef.add({
+                date: today,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                name: result.name,
+                cals: Number(result.cals) || 0,
+                prot: Number(result.prot) || 0,
+                carb: Number(result.carb) || 0,
+                fat: Number(result.fat) || 0
+            });
+            setInput('');
+            setResult(null);
+            showToast('Food logged!', 'success');
+        } catch (e) {
+            showToast('Logging failed. Database error.', 'error');
+            console.error("Firestore Error:", e);
+        }
     };
 
     return (
@@ -285,7 +506,7 @@
         <div className="flex gap-3 mb-4">
           <input className="flex-1 bg-slate-950/70 border border-slate-700 rounded-xl px-5 py-4 text-lg placeholder-slate-500 focus:border-emerald-500 transition" 
                  placeholder="Large pepperoni pizza, 2 eggs + avocado toast..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && analyze()} />
-          <button onClick={analyze} disabled={loading} className="bg-emerald-600 px-8 rounded-xl font-bold disabled:opacity-50">
+          <button onClick={analyze} disabled={loading} className="bg-emerald-600 px-8 rounded-xl font-bold disabled:opacity-50 hover:bg-emerald-500 transition-colors">
             {loading ? '...' : 'AI'}
           </button>
         </div>
@@ -295,29 +516,45 @@
             <div className="grid grid-cols-4 gap-4">
               {['cals','prot','carb','fat'].map(k => (
                 <input key={k} type="number" className="bg-slate-950/70 rounded-lg p-3 text-center text-xl font-bold" 
-                       value={result[k]} onChange={e => setResult({...result, [k]: +e.target.value})} placeholder={k} />
+                       value={result[k]} onChange={e => setResult({...result, [k]: e.target.value})} placeholder={k} />
               ))}
             </div>
-            <button onClick={() => { onAdd({ id: Date.now(), date: today, ...result }); setInput(''); setResult(null); }} 
-                    className="w-full bg-emerald-600 py-4 rounded-xl font-bold text-lg">Add to Today</button>
+            <button onClick={add} className="w-full bg-emerald-600 py-4 rounded-xl font-bold text-lg">Add to Today</button>
           </div>
         )}
       </div>
     );
   };
 
-  const GymTab = ({ workouts, setWorkouts, setGymLog, showToast }) => {
+  const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast }) => {
     const [selected, setSelected] = useState(workouts[0]);
     const [logData, setLogData] = useState({});
+    const today = new Date().toISOString().split('T')[0];
 
-    const finishWorkout = () => {
-      const loggedExercises = Object.entries(logData).flatMap(([ex, sets]) => 
-        Object.values(sets).filter(s => s.w && s.r).map(s => ({ exercise: ex, ...s }))
-      );
+    const finishWorkout = async () => {
+      if (!isReady || !userId) return showToast('Database not ready.', 'error');
+      
+      const loggedExercises = Object.entries(logData).map(([ex, sets]) => ({
+        exercise: ex,
+        sets: Object.values(sets).filter(s => s.w && s.r).map(s => ({ weight: parseFloat(s.w), reps: parseInt(s.r) }))
+      })).filter(e => e.sets.length > 0);
+
       if (loggedExercises.length === 0) return showToast('Log at least one set', 'error');
-      setGymLog(prev => [{ id: Date.now(), date: today, workoutName: selected.name, exercises: loggedExercises }, ...prev]);
-      setLogData({});
-      showToast('Workout logged!');
+
+      const baseRef = DB.collection(`users/${userId}/gym_logs/logs`);
+      try {
+          await baseRef.add({ 
+              date: today, 
+              timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+              workoutName: selected.name, 
+              exercises: loggedExercises 
+          });
+          setLogData({});
+          showToast('Workout logged!', 'success');
+      } catch (e) {
+          showToast('Logging failed. Database error.', 'error');
+          console.error("Firestore Error:", e);
+      }
     };
 
     return (
@@ -366,16 +603,38 @@
     );
   };
 
-  const CardioTab = ({ setCardioLog, showToast }) => {
+  const CardioTab = ({ isReady, userId, showToast }) => {
     const [type, setType] = useState('run');
     const [distance, setDistance] = useState('');
     const [time, setTime] = useState('');
+    const today = new Date().toISOString().split('T')[0];
 
-    const logCardio = () => {
+    const logCardio = async () => {
+      if (!isReady || !userId) return showToast('Database not ready.', 'error');
       if (!distance || !time) return showToast('Fill all fields', 'error');
-      const calories = type === 'run' ? Math.round(distance * 100) : type === 'cycle' ? Math.round(distance * 40) : Math.round(distance * 60);
-      setCardioLog(prev => [{ id: Date.now(), date: today, type, distance: parseFloat(distance), time: parseFloat(time), calories }, ...prev]);
-      setDistance(''); setTime(''); showToast('Cardio logged!');
+      
+      const dist = parseFloat(distance);
+      const timeMin = parseFloat(time);
+      if (isNaN(dist) || isNaN(timeMin) || dist <= 0 || timeMin <= 0) return showToast('Invalid numbers', 'error');
+
+      const calories = type === 'run' ? Math.round(dist * 100) : type === 'cycle' ? Math.round(dist * 40) : Math.round(dist * 60);
+
+      const baseRef = DB.collection(`users/${userId}/cardio_logs/logs`);
+      try {
+          await baseRef.add({ 
+              date: today, 
+              timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+              type, 
+              distance: dist, 
+              time: timeMin, 
+              calories 
+          });
+          setDistance(''); setTime(''); 
+          showToast('Cardio logged!', 'success');
+      } catch (e) {
+          showToast('Logging failed. Database error.', 'error');
+          console.error("Firestore Error:", e);
+      }
     };
 
     return (
@@ -411,3 +670,4 @@
 </script>
 </body>
 </html>
+
