@@ -132,7 +132,7 @@
     };
 
     const NutrientLegend = ({ cals, prot, carb, fat, goals }) => (
-      <div className="grid grid-cols-4 gap-2 mt-6 w-full max-w-md text-center">
+      <div className="grid grid-cols-2 gap-2 mt-6 w-full max-w-md text-center">
         {[
           { val: cals, goal: goals.calories, label: 'Cals', color: 'text-emerald-400' },
           { val: prot, goal: goals.protein, label: 'Prot', color: 'text-blue-400' },
@@ -389,7 +389,7 @@
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Left: Rings */}
             <div className="flex flex-col items-center justify-center bg-slate-900/50 rounded-3xl p-4">
-              <ActivityRings scale={0.8} cals={dayData.totals.cals} prot={dayData.totals.prot} carb={dayData.totals.carb} fat={dayData.totals.fat} goals={data.goals || GOALS} />
+              <ActivityRings scale={0.7} cals={dayData.totals.cals} prot={dayData.totals.prot} carb={dayData.totals.carb} fat={dayData.totals.fat} goals={data.goals || GOALS} />
             </div>
 
             {/* Right: Activity Summary */}
