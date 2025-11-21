@@ -591,12 +591,8 @@
                 GEMINI_KEY = doc.data().geminiKey || '';
                 saveKey('hos_gemini_key', GEMINI_KEY);
             } else {
-                // If doc doesn't exist, check the hardcoded script key and upload if present
-                if (HARDCODED_GEMINI_KEY) {
-                    await saveSharedConfig(HARDCODED_GEMINI_KEY);
-                } else {
-                    setCloudConfig({}); // Set initial empty state
-                }
+                // If doc doesn't exist, set initial empty state
+                setCloudConfig({}); 
             }
         } catch (e) {
             console.error("Error loading shared config:", e);
@@ -756,7 +752,7 @@
     // Admin check: True if the user is the one who originally set the key
     const isAdmin = userId && cloudConfig?.adminUID === userId;
     // Fallback Admin Check: If no key exists yet, the first logged-in user is the admin
-    const isFirstTimeAdmin = userId && !cloudConfig?.adminUID;
+    const isFirstTimeAdmin = userId && !cloudConfig?.adminUID && cloudConfig !== null; // cloudConfig !== null ensures we've checked Firestore
 
 
     return (
