@@ -339,20 +339,20 @@
       };
 
       return (
-        <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 border border-slate-700">
-          <div className="flex justify-between items-center mb-4">
-            <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-slate-800 rounded-full">←</button>
-            <div className="font-bold text-lg">{viewDate.toLocaleDateString('en', { month: 'long', year: 'numeric' })}</div>
-            <button onClick={() => changeMonth(1)} className="p-2 hover:bg-slate-800 rounded-full">→</button>
+        <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-4 border border-slate-700">
+          <div className="flex justify-between items-center mb-2">
+            <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-slate-800 rounded-full">←</button>
+            <div className="font-bold text-base">{viewDate.toLocaleDateString('en', { month: 'long', year: 'numeric' })}</div>
+            <button onClick={() => changeMonth(1)} className="p-1 hover:bg-slate-800 rounded-full">→</button>
           </div>
-          <div className="grid grid-cols-7 gap-1 text-center text-sm">
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => <div key={d} className="text-slate-500 py-2">{d}</div>)}
+          <div className="grid grid-cols-7 gap-1 text-center text-xs">
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => <div key={d} className="text-slate-500 py-1">{d}</div>)}
             {empties.map(i => <div key={`e-${i}`} />)}
             {days.map(d => (
               <button key={d} onClick={() => onSelect(new Date(viewDate.getFullYear(), viewDate.getMonth(), d, 12).toISOString().split('T')[0])}
                 className={`relative py-2 rounded-lg font-bold transition-all ${isSelected(d) ? 'bg-cyan-600 text-white' : 'hover:bg-slate-800 text-slate-300'} ${isToday(d) ? 'border border-cyan-500' : ''}`}>
                 {d}
-                {hasData(d) && <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-emerald-400 rounded-full" />}
+                {hasData(d) && <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-emerald-400 rounded-full" />}
               </button>
             ))}
           </div>
@@ -386,22 +386,23 @@
 
       return (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Left: Rings */}
-            <div className="flex flex-col items-center justify-center bg-slate-900/50 rounded-3xl p-4">
-              <ActivityRings scale={0.7} cals={dayData.totals.cals} prot={dayData.totals.prot} carb={dayData.totals.carb} fat={dayData.totals.fat} goals={data.goals || GOALS} />
+          <div className="grid grid-cols-2 gap-4">
+            {/* Left: Rings (Food) */}
+            <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-4 border border-slate-700 flex flex-col items-center">
+              <h3 className="text-lg font-bold mb-2 text-slate-300 self-start">Food</h3>
+              <ActivityRings scale={0.65} cals={dayData.totals.cals} prot={dayData.totals.prot} carb={dayData.totals.carb} fat={dayData.totals.fat} goals={data.goals || GOALS} />
             </div>
 
             {/* Right: Activity Summary */}
-            <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 border border-slate-700 flex flex-col">
-              <h3 className="text-xl font-bold mb-4 text-slate-300">Activity</h3>
-              <div className="flex-1 space-y-4 overflow-y-auto max-h-64 pr-2 custom-scrollbar">
-                {dayData.gym.length === 0 && dayData.cardio.length === 0 && <div className="text-slate-500 text-center py-8">No activity recorded.</div>}
+            <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-4 border border-slate-700 flex flex-col">
+              <h3 className="text-lg font-bold mb-2 text-slate-300">Activity</h3>
+              <div className="flex-1 space-y-3 overflow-y-auto max-h-48 pr-1 custom-scrollbar">
+                {dayData.gym.length === 0 && dayData.cardio.length === 0 && <div className="text-slate-500 text-center py-8 text-sm">No activity.</div>}
 
                 {dayData.gym.map(g => (
-                  <div key={g.id} className="bg-slate-950/50 p-4 rounded-xl border-l-4 border-cyan-500">
-                    <div className="font-bold text-lg text-white">{g.workoutName}</div>
-                    <div className="text-xs text-slate-400 mt-1">{g.exercises.map(e => e.exercise).join(', ')}</div>
+                  <div key={g.id} className="bg-slate-950/50 p-3 rounded-xl border-l-4 border-cyan-500">
+                    <div className="font-bold text-sm text-white">{g.workoutName}</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{g.exercises.map(e => e.exercise).join(', ')}</div>
                   </div>
                 ))}
 
@@ -409,12 +410,12 @@
                   const color = c.type === 'run' ? 'border-emerald-500' : c.type === 'cycle' ? 'border-amber-500' : 'border-blue-500';
                   const icon = c.type === 'run' ? '🏃' : c.type === 'cycle' ? '🚴' : '🏊';
                   return (
-                    <div key={c.id} className={`bg-slate-950/50 p-4 rounded-xl border-l-4 ${color} flex justify-between items-center`}>
+                    <div key={c.id} className={`bg-slate-950/50 p-3 rounded-xl border-l-4 ${color} flex justify-between items-center`}>
                       <div>
-                        <div className="font-bold text-lg text-white capitalize">{icon} {c.type}</div>
-                        <div className="text-xs text-slate-400 mt-1">{c.time} mins</div>
+                        <div className="font-bold text-sm text-white capitalize">{icon} {c.type}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{c.time} mins</div>
                       </div>
-                      <div className="text-xl font-black text-slate-200">{c.distance}km</div>
+                      <div className="text-sm font-black text-slate-200">{c.distance}km</div>
                     </div>
                   );
                 })}
@@ -557,10 +558,12 @@
       const [logData, setLogData] = useState({});
       const [newExercise, setNewExercise] = useState('');
       const [isAdding, setIsAdding] = useState(false);
+      const [skippedExercises, setSkippedExercises] = useState([]);
       const today = new Date().toISOString().split('T')[0];
 
       // Initialize 3 sets for each exercise when workout changes
       useEffect(() => {
+        setSkippedExercises([]); // Reset skipped on workout change
         setLogData(prev => {
           const next = { ...prev };
           let changed = false;
@@ -651,15 +654,18 @@
             ))}
           </div>
 
-          {selected.exercises.map(ex => (
+          {selected.exercises.filter(ex => !skippedExercises.includes(ex)).map(ex => (
             <div key={ex} className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 border border-slate-700">
               <div className="flex justify-between items-center mb-4">
                 <div>
                   <h3 className="font-bold text-xl">{ex}</h3>
                   {stats[ex] && <div className="text-xs text-emerald-400 font-bold mt-1">Last: {stats[ex].w}kg x {stats[ex].r}</div>}
                 </div>
-                <button onClick={() => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [Date.now()]: { w: '', r: '' } } }))}
-                  className="text-cyan-400 text-sm font-bold">+ ADD SET</button>
+                <div className="flex gap-3">
+                  <button onClick={() => setSkippedExercises(prev => [...prev, ex])} className="text-slate-500 text-sm font-bold hover:text-white">SKIP</button>
+                  <button onClick={() => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [Date.now()]: { w: '', r: '' } } }))}
+                    className="text-cyan-400 text-sm font-bold">+ ADD SET</button>
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 {/* Headers */}
@@ -682,7 +688,7 @@
                           value={set.r} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [id]: { ...set, r: e.target.value } } }))} />
                         {/* Delete button absolute positioned to not break grid */}
                         <button onClick={() => setLogData(prev => { const newEx = { ...prev[ex] }; delete newEx[id]; return { ...prev, [ex]: newEx }; })}
-                          className="absolute -right-2 -top-2 text-red-500 bg-slate-900 rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-700 opacity-0 hover:opacity-100 transition-opacity">×</button>
+                          className="absolute -right-2 -top-2 text-red-500 bg-slate-900 rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-700 hover:bg-red-500 hover:text-white transition-colors">×</button>
                       </div>
                     </React.Fragment>
                   ))}
@@ -702,6 +708,21 @@
               </div>
             )}
           </div>
+
+          {/* Skipped Exercises Section */}
+          {skippedExercises.length > 0 && (
+            <div className="text-center">
+              <div className="text-xs text-slate-500 uppercase mb-2">Skipped Exercises</div>
+              <div className="flex flex-wrap justify-center gap-2">
+                {skippedExercises.map(ex => (
+                  <button key={ex} onClick={() => setSkippedExercises(prev => prev.filter(e => e !== ex))}
+                    className="bg-slate-800 px-3 py-1 rounded-lg text-xs font-bold text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+                    + {ex}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <button onClick={finishWorkout} className="w-full py-6 rounded-2xl font-black text-2xl text-white" style={{ background: selected.color }}>
             Finish Workout
