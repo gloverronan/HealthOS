@@ -273,7 +273,7 @@ const GeminiFoodEntry = ({ isReady, userId, showToast }) => {
   const add = async () => {
     if (!result || !isReady || !userId) return;
     try {
-      await DB.collection(`users/${userId}/food_logs/logs`).add({
+      await DB.collection(`users/${userId}/food`).add({
         date: today,
         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
         name: result.name,
@@ -360,7 +360,7 @@ const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast }) => {
     if (loggedExercises.length === 0) return showToast('Add at least one set', 'error');
 
     try {
-      await DB.collection(`users/${userId}/gym_logs/logs`).add({ 
+      await DB.collection(`users/${userId}/gym`).add({ 
         date: today, 
         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
         workoutName: selected.name, 
@@ -434,7 +434,7 @@ const CardioTab = ({ isReady, userId, showToast }) => {
     const calories = type === 'run' ? Math.round(dist * 100) : type === 'cycle' ? Math.round(dist * 40) : Math.round(dist * 60);
 
     try {
-      await DB.collection(`users/${userId}/cardio_logs/logs`).add({ 
+      await DB.collection(`users/${userId}/cardio`).add({ 
         date: today, 
         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
         type, distance: dist, time: mins, calories 
@@ -523,17 +523,23 @@ const App = () => {
     return unsub;
   }, []);
 
-  // Real-time listeners
+    // Real-time listeners – FLAT STRUCTURE (fixes the error forever)
   useEffect(() => {
     if (!userId) return;
-    const base = DB.collection(`users/${userId}`);
 
     const unsubs = [
-      base.doc('food_logs').collection('logs').onSnapshot(s => setFoodLog(s.docs.map(d => ({id: d.id, ...d.data()})))),
-      base.doc('gym_logs').collection('logs').onSnapshot(s => setGymLog(s.docs.map(d => ({id: d.id, ...d.data()})))),
-      base.doc('cardio_logs').collection('logs').onSnapshot(s => setCardioLog(s.docs.map(d => ({id: d.id, ...d.data()}))))
+      DB.collection(`users/${userId}/food`).onSnapshot(snap => 
+        setFoodLog(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })))
+      ),
+      DB.collection(`users/${userId}/gym`).onSnapshot(snap => 
+        setGymLog(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })))
+      ),
+      DB.collection(`users/${userId}/cardio`).onSnapshot(snap => 
+        setCardioLog(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })))
+      )
     ];
-    return () => unsubs.forEach(u => u?.());
+
+    return () => unsubs.forEach(u => u());
   }, [userId]);
 
   const todaysData = useMemo(() => {
