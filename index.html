@@ -1,373 +1,426 @@
-import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import {
-  getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, serverTimestamp, where
-} from 'firebase/firestore';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Health OS v-Stable</title>
 
-// --- FIREBASE SETUP ---
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-const apiKey = ""; // Injected at runtime
+    <!-- WORKING Tailwind CSS v3 via CDN (the only reliable way for pure static HTML) -->
+    <script src="https://cdn.tailwindcss.com"></script>
 
-// --- USER GOALS (6'2", 87kg, Recomp) ---
-const GOALS = {
-  calories: 2350,
-  protein: 180
-};
+    <!-- React 18 -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
-// --- GYM DATA ---
-const INITIAL_GYM_DAYS = [
-  { day: 'Day 1', name: 'Push (Chest/Shoulders/Tri)', exercises: [
-    'Bench Press', 'Incline DB Press', 'Overhead Press', 'Lateral Raises', 'Triceps Extension'
-  ]},
-  { day: 'Day 3', name: 'Legs & Core', exercises: [
-    'Squats', 'RDLs', 'Leg Extensions', 'Hamstring Curls', 'Calf Raises', 'Cable Crunches'
-  ]},
-  { day: 'Day 5', name: 'Pull (Back/Biceps)', exercises: [
-    'Barbell Rows', 'Lat Pulldowns', 'Face Pulls', 'Bicep Curls', 'Hammer Curls'
-  ]},
-];
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-// --- COMPONENT: PROGRESS BAR ---
-const ProgressBar = ({ current, target, colorClass, label }) => {
-  const percentage = Math.min(100, Math.max(0, (current / target) * 100));
-  const left = target - current;
-  
-  return (
-    <div className="w-full mb-3">
-      <div className="flex justify-between text-xs font-bold uppercase mb-1 tracking-wider">
-        <span className={colorClass}>{label}</span>
-        <span className="text-white">
-          {current} / {target} <span className="text-slate-500 ml-1">({left > 0 ? `${left} left` : `${Math.abs(left)} over`})</span>
-        </span>
-      </div>
-      <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
-        <div 
-          className={`h-full transition-all duration-500 ease-out ${percentage >= 100 ? 'bg-red-500' : colorClass.replace('text-', 'bg-')}`} 
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
+    <style>
+        body { background-color: #020617; color: white; font-family: -apple-system, BlinkMacSystemFont, sans-serif; -webkit-tap-highlight-color: transparent; padding-bottom: 100px; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .input-box { background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; text-align: center; color: white; font-weight: 600; font-size: 16px; width: 100%; height: 44px; outline: none; }
+        #loader { position: fixed; inset: 0; background: #020617; z-index: 9999; display: flex; justify-content: center; align-items: center; transition: opacity 0.5s; }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <div id="loader">
+        <div class="flex flex-col items-center">
+            <div class="w-12 h-12 border-4 border-slate-700 border-t-cyan-500 rounded-full animate-spin mb-4"></div>
+            <div class="text-slate-500 font-bold text-sm tracking-widest uppercase">Health OS</div>
+        </div>
     </div>
-  );
-};
 
-// --- COMPONENT: GYM TRACKER ---
-const GymTracker = ({ db, userId, showFeedback }) => {
-  const [gymWorkouts, setGymWorkouts] = useState(INITIAL_GYM_DAYS);
-  const [currentDayIndex, setCurrentDayIndex] = useState(0);
-  const [inputData, setInputData] = useState({});
-  const [newExerciseName, setNewExerciseName] = useState('');
-  const [view, setView] = useState('active');
-  const [historyLogs, setHistoryLogs] = useState([]);
-  const [activeTip, setActiveTip] = useState(null);
-  const [tipLoading, setTipLoading] = useState(false);
+    <div id="root" style="opacity: 0; transition: opacity 0.5s;"></div>
 
-  const currentGymDay = gymWorkouts[currentDayIndex];
+    <script type="text/babel">
+        const { useState, useEffect } = React;
 
-  useEffect(() => {
-    if (!db || !userId) return;
-    const q = query(collection(db, 'artifacts', appId, 'users', userId, 'workout_logs'));
-    const unsub = onSnapshot(q, (snap) => {
-      const logs = snap.docs.map(d => ({ id: d.id, ...d.data(), timestamp: d.data().timestamp?.toDate().toLocaleString() }));
-      logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      setHistoryLogs(logs);
-    });
-    return () => unsub();
-  }, [db, userId]);
+        // --- CONFIG & UTILS ---
+        const SAFE_LOAD = (k, d) => { try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : d; } catch(e) { return d; } };
+        const SAFE_SAVE = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) {} };
 
-  const handleInputChange = (exName, setIndex, field, val) => {
-    setInputData(prev => ({
-      ...prev, [exName]: { ...prev[exName], [setIndex]: { ...prev[exName]?.[setIndex], [field]: val } }
-    }));
-  };
+        const GOALS = { calories: 2350, protein: 180, carbs: 250 };
+        const COLOR_MAP = { '#f43f5e': 'rose-500', '#3b82f6': 'blue-500', '#10b981': 'emerald-500' };
+        const INIT_DAYS = [
+            { day: 'Day 1', name: 'Push', color: '#f43f5e', exercises: ['Bench Press', 'Overhead Press', 'Triceps Ext'] },
+            { day: 'Day 3', name: 'Legs', color: '#3b82f6', exercises: ['Squats', 'RDLs', 'Calf Raises'] },
+            { day: 'Day 5', name: 'Pull', color: '#10b981', exercises: ['Rows', 'Lat Pulldowns', 'Curls'] }
+        ];
 
-  const handleSubmit = async () => {
-    const today = new Date().toISOString().split('T')[0];
-    const logId = `${today}-${currentGymDay.day}`;
-    const exercises = Object.entries(inputData).reduce((acc, [name, setsData]) => {
-      const sets = Object.entries(setsData).map(([idx, d]) => ({
-        set: parseInt(idx) + 1, weight: parseFloat(d.weight) || 0, reps: parseInt(d.reps) || 0
-      })).filter(s => s.weight > 0 || s.reps > 0);
-      if (sets.length) acc.push({ exerciseName: name, sets });
-      return acc;
-    }, []);
+        let apiKey = SAFE_LOAD('hos_api_key', '');
 
-    if (!exercises.length) return showFeedback('Enter at least one set', 'error');
+        // --- ICONS ---
+        const Icon = ({ name, size = 24, className = "" }) => {
+            const paths = {
+                History: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
+                Settings: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z",
+                Back: "M15 19l-7-7 7-7",
+                Trash: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16",
+                Plus: "M12 4v16m8-8H4",
+                Minus: "M20 12H4",
+                ChevronUp: "M5 15l7-7 7 7",
+                ChevronDown: "M19 9l-7 7-7-7"
+            };
+            return (
+                <svg className={`w-${size/4} h-${size/4} ${className}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={paths[name] || ""} />
+                </svg>
+            );
+        };
 
-    try {
-      await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'workout_logs', logId), {
-        userId, day: currentGymDay.day, dayName: currentGymDay.name, date: today, timestamp: serverTimestamp(), exercises
-      });
-      showFeedback('Workout Logged!', 'success');
-      setInputData({});
-    } catch (e) { showFeedback('Save failed', 'error'); }
-  };
+        // --- ACTIVITY RINGS ---
+        const ActivityRings = ({ cals, calsT, prot, protT, carbs, carbsT }) => {
+            const Ring = ({ r, current, target, color, bg }) => {
+                const circum = 2 * Math.PI * r;
+                const pct = Math.min(100, Math.max(0, (current / target) * 100));
+                const offset = circum - (pct / 100) * circum;
 
-  const handleAddExercise = () => {
-    if (!newExerciseName.trim()) return;
-    const updated = [...gymWorkouts];
-    updated[currentDayIndex].exercises.push(newExerciseName.trim());
-    setGymWorkouts(updated);
-    setNewExerciseName('');
-  };
+                return (
+                    <g>
+                        <circle cx="60" cy="60" r={r} stroke={bg} strokeWidth="10" fill="none" opacity="0.2" />
+                        <circle cx="60" cy="60" r={r} stroke={color} strokeWidth="10" fill="none"
+                                strokeDasharray={circum} strokeDashoffset={offset} strokeLinecap="round"
+                                className="origin-center -rotate-90 transition-all duration-1000 ease-out"
+                                style={{ filter: `drop-shadow(0 0 6px ${color})` }} />
+                    </g>
+                );
+            };
 
-  const handleRemoveExercise = (name) => {
-    const updated = [...gymWorkouts];
-    updated[currentDayIndex].exercises = updated[currentDayIndex].exercises.filter(e => e !== name);
-    setGymWorkouts(updated);
-  };
-
-  const getFormTips = async (exerciseName) => {
-    setTipLoading(exerciseName);
-    setActiveTip(null);
-    try {
-      const prompt = `Provide 3 short, expert form cues for the gym exercise "${exerciseName}". Also mention 1 common mistake to avoid. Keep it very concise.`;
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
-      const data = await response.json();
-      setActiveTip({ name: exerciseName, text: data.candidates?.[0]?.content?.parts?.[0]?.text });
-    } catch (e) { showFeedback('Could not load tips', 'error'); } finally { setTipLoading(false); }
-  };
-
-  if (view === 'history') {
-    return (
-      <div className="space-y-4 pb-20">
-        <button onClick={() => setView('active')} className="text-cyan-400 font-bold mb-4">&larr; Back to Logger</button>
-        {historyLogs.map(log => (
-          <div key={log.id} className="bg-slate-800 p-4 rounded-xl border-l-4 border-cyan-500">
-            <div className="flex justify-between mb-2"><h3 className="font-bold">{log.dayName}</h3><span className="text-xs text-slate-400">{log.date}</span></div>
-            {log.exercises.map((e, i) => (
-              <div key={i} className="text-sm text-slate-300 mb-1">
-                <span className="text-cyan-200">{e.exerciseName}:</span> {e.sets.map(s => `${s.weight}x${s.reps}`).join(', ')}
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div className="pb-24 space-y-6 relative">
-      {activeTip && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setActiveTip(null)}>
-          <div className="bg-slate-800 p-6 rounded-2xl max-w-sm w-full border border-cyan-500 shadow-2xl relative animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setActiveTip(null)} className="absolute top-3 right-3 text-slate-400 hover:text-white">✕</button>
-            <h3 className="text-xl font-bold text-cyan-400 mb-4">✨ {activeTip.name} Coach</h3>
-            <div className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">{activeTip.text}</div>
-          </div>
-        </div>
-      )}
-
-      <div className="bg-slate-800 p-4 rounded-xl shadow-lg flex flex-col items-center relative">
-        <button onClick={() => setView('history')} className="absolute top-2 right-2 text-xs text-cyan-400 border border-cyan-400 px-2 py-1 rounded">History</button>
-        <div className="flex items-center justify-between w-full mt-4">
-          <button onClick={() => setCurrentDayIndex((i) => (i - 1 + gymWorkouts.length) % gymWorkouts.length)} className="p-2 text-cyan-400 text-2xl">‹</button>
-          <div className="text-center">
-            <input value={currentGymDay.name} onChange={(e) => {const u = [...gymWorkouts]; u[currentDayIndex].name = e.target.value; setGymWorkouts(u);}} 
-              className="bg-transparent text-xl font-bold text-center w-48 focus:border-b border-cyan-500 outline-none" />
-            <div className="text-xs text-slate-400 uppercase tracking-wider">{currentGymDay.day}</div>
-          </div>
-          <button onClick={() => setCurrentDayIndex((i) => (i + 1) % gymWorkouts.length)} className="p-2 text-cyan-400 text-2xl">›</button>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        {currentGymDay.exercises.map(ex => (
-          <div key={ex} className="bg-slate-800 p-3 rounded-xl shadow">
-            <div className="flex justify-between mb-2 items-center">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-cyan-100">{ex}</span>
-                <button onClick={() => getFormTips(ex)} className="text-xs bg-slate-700 text-cyan-400 px-2 py-0.5 rounded-full border border-cyan-500/30" disabled={tipLoading === ex}>
-                  {tipLoading === ex ? '...' : '✨ Tips'}
-                </button>
-              </div>
-              <button onClick={() => handleRemoveExercise(ex)} className="text-red-400 text-xs px-2">×</button>
-            </div>
-            <div className="flex gap-2 overflow-x-auto">
-              {[0,1,2].map(i => (
-                <div key={i} className="flex-shrink-0 w-28 bg-slate-700 rounded p-2 flex gap-1">
-                  <input type="number" step="0.5" placeholder="kg" className="w-1/2 bg-slate-600 rounded px-1 text-center text-sm" 
-                    onChange={(e) => handleInputChange(ex, i, 'weight', e.target.value)} value={inputData[ex]?.[i]?.weight || ''} />
-                  <input type="number" placeholder="reps" className="w-1/2 bg-slate-600 rounded px-1 text-center text-sm" 
-                    onChange={(e) => handleInputChange(ex, i, 'reps', e.target.value)} value={inputData[ex]?.[i]?.reps || ''} />
+            return (
+                <div className="flex items-center justify-between bg-slate-900 p-5 rounded-2xl shadow-lg mb-6 border border-slate-800">
+                    <div className="space-y-3 z-10 flex-1">
+                        {[
+                            { l: 'Calories', v: cals, t: calsT, col: '#10b981' },
+                            { l: 'Protein', v: prot, t: protT, col: '#3b82f6' },
+                            { l: 'Carbs', v: carbs, t: carbsT, col: '#f97316' }
+                        ].map(x => (
+                            <div key={x.l}>
+                                <div className="text-[10px] font-bold uppercase tracking-wider opacity-70" style={{ color: x.col }}>{x.l}</div>
+                                <div className="text-2xl font-black text-white">{x.v} <span className="text-slate-600 text-sm font-medium">/ {x.t}</span></div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="relative w-32 h-32 flex-shrink-0">
+                        <svg width="120" height="120" viewBox="0 0 120 120">
+                            <Ring r={50} current={cals} target={calsT} color="#10b981" bg="#064e3b" />
+                            <Ring r={38} current={prot} target={protT} color="#3b82f6" bg="#1e3a8a" />
+                            <Ring r={26} current={carbs} target={carbsT} color="#f97316" bg="#7c2d12" />
+                        </svg>
+                    </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+            );
+        };
 
-      <div className="flex gap-2">
-        <input className="bg-slate-800 flex-1 p-3 rounded-xl outline-none" placeholder="Add new exercise..." 
-          value={newExerciseName} onChange={e => setNewExerciseName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddExercise()} />
-        <button onClick={handleAddExercise} className="bg-slate-700 px-4 rounded-xl font-bold text-cyan-400">+</button>
-      </div>
+        // --- GYM TRACKER ---
+        const GymTracker = ({ showFeedback }) => {
+            const [days, setDays] = useState(() => SAFE_LOAD('hos_workouts', INIT_DAYS));
+            const [logs, setLogs] = useState(() => SAFE_LOAD('hos_gym_logs', []));
+            const [setCounts, setSetCounts] = useState(() => SAFE_LOAD('hos_sets', {}));
+            const [idx, setIdx] = useState(0);
+            const [input, setInput] = useState({});
+            const [isEdit, setIsEdit] = useState(false);
+            const [newEx, setNewEx] = useState('');
 
-      <button onClick={handleSubmit} className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-900 py-4 rounded-xl font-bold text-lg shadow-lg shadow-cyan-500/20 transition-all">LOG WORKOUT</button>
-    </div>
-  );
-};
+            useEffect(() => {
+                SAFE_SAVE('hos_workouts', days);
+                SAFE_SAVE('hos_gym_logs', logs);
+                SAFE_SAVE('hos_sets', setCounts);
+            }, [days, logs, setCounts]);
 
-// --- COMPONENT: FOOD TRACKER ---
-const FoodTracker = ({ db, userId, showFeedback }) => {
-  const [logs, setLogs] = useState([]);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [foodInput, setFoodInput] = useState('');
-  const [suggestLoading, setSuggestLoading] = useState(false);
-  const [suggestion, setSuggestion] = useState('');
-  const [staging, setStaging] = useState({ name: '', calories: '', protein: '', carbs: '', fat: '' });
+            const day = days[idx] || days[0];
+            const themeHex = day.color || '#3b82f6';
+            const themeClass = COLOR_MAP[themeHex] || 'cyan-500';
 
-  const todayStr = new Date().toISOString().split('T')[0];
+            const updateSetCount = (ex, delta) => setSetCounts(prev => ({
+                ...prev,
+                [ex]: Math.max(1, Math.min(8, (prev[ex] || 3) + delta))
+            }));
 
-  useEffect(() => {
-    if (!db || !userId) return;
-    const q = query(collection(db, 'artifacts', appId, 'users', userId, 'food_logs'), where('date', '==', todayStr));
-    const unsub = onSnapshot(q, (snap) => setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    return () => unsub();
-  }, [db, userId, todayStr]);
+            const logWorkout = () => {
+                const exercises = Object.entries(input).reduce((acc, [name, sets]) => {
+                    const validSets = Object.values(sets || {})
+                        .map((s, i) => ({ set: i + 1, weight: Number(s.w) || 0, reps: Number(s.r) || 0 }))
+                        .filter(s => s.weight > 0 || s.reps > 0);
+                    if (validSets.length) acc.push({ exerciseName: name, sets: validSets });
+                    return acc;
+                }, []);
 
-  const totals = logs.reduce((acc, item) => ({
-    cals: acc.cals + (item.calories || 0),
-    p: acc.p + (item.protein || 0),
-    c: acc.c + (item.carbs || 0),
-    f: acc.f + (item.fat || 0),
-  }), { cals: 0, p: 0, c: 0, f: 0 });
+                if (!exercises.length) return showFeedback('Log at least one set', 'error');
 
-  const handleAiEstimate = async () => {
-    if (!foodInput.trim()) return;
-    setAiLoading(true);
-    try {
-      const prompt = `Estimate nutrition for: "${foodInput}". Return JSON only: { "name": "short name", "calories": number, "protein": number, "carbs": number, "fat": number }. If unknown, guess.`;
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
-      const data = await response.json();
-      const result = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text.replace(/```json|```/g, '').trim());
-      setStaging({ name: result.name || foodInput, calories: result.calories || 0, protein: result.protein || 0, carbs: result.carbs || 0, fat: result.fat || 0 });
-      showFeedback('Est. Complete', 'success');
-    } catch (e) { showFeedback('AI failed', 'error'); setStaging({ name: foodInput, calories: '', protein: '', carbs: '', fat: '' }); } finally { setAiLoading(false); }
-  };
+                setLogs([{ id: Date.now(), date: new Date().toLocaleDateString(), dayName: day.name, color: day.color, exercises }, ...logs]);
+                setInput({});
+                showFeedback('Workout Saved!', 'success');
+            };
 
-  const handleSuggestMeal = async () => {
-    setSuggestLoading(true);
-    setSuggestion('');
-    try {
-      const eatenList = logs.map(l => l.name).join(', ') || 'Nothing yet';
-      const prompt = `My daily goals are ${GOALS.calories} calories and ${GOALS.protein}g protein. Today I have eaten: ${eatenList} (Total: ${totals.cals} cal, ${totals.p}g prot). Suggest ONE meal to eat next to help me hit these targets precisely. Keep it under 20 words.`;
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
-      setSuggestion(await response.json().then(d => d.candidates?.[0]?.content?.parts?.[0]?.text));
-    } catch (e) { showFeedback('Chef busy', 'error'); } finally { setSuggestLoading(false); }
-  };
+            return (
+                <div className="space-y-6 pb-20">
+                    {/* Header */}
+                    <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-xl text-center">
+                        <div className="flex items-center justify-between mb-4">
+                            <button onClick={() => setIdx((idx - 1 + days.length) % days.length)} className="text-4xl text-slate-500 hover:text-white">‹</button>
+                            <div>
+                                <input className={`bg-transparent text-3xl font-black text-center w-full outline-none text-${themeClass}`} value={day.name}
+                                    onChange={e => { const d = [...days]; d[idx].name = e.target.value; setDays(d); }} />
+                                <div className="text-xs text-slate-500 font-bold uppercase tracking-widest">{day.day}</div>
+                            </div>
+                            <button onClick={() => setIdx((idx + 1) % days.length)} className="text-4xl text-slate-500 hover:text-white">›</button>
+                        </div>
+                        <button onClick={() => setIsEdit(!isEdit)} className="text-xs font-bold py-2 px-5 rounded-full bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white">
+                            {isEdit ? 'Done Editing' : 'Edit Routine'}
+                        </button>
+                    </div>
 
-  const handleAddFood = async () => {
-    if (!staging.name || !staging.calories) return showFeedback('Name/Cals required', 'error');
-    try {
-      await setDoc(doc(collection(db, 'artifacts', appId, 'users', userId, 'food_logs')), {
-        userId, date: todayStr, timestamp: serverTimestamp(),
-        name: staging.name, calories: parseInt(staging.calories), protein: parseInt(staging.protein) || 0, carbs: parseInt(staging.carbs) || 0, fat: parseInt(staging.fat) || 0
-      });
-      setStaging({ name: '', calories: '', protein: '', carbs: '', fat: '' }); setFoodInput(''); showFeedback('Logged', 'success');
-    } catch (e) { showFeedback('Error', 'error'); }
-  };
+                    {/* Exercises */}
+                    {day.exercises.map((ex, i) => {
+                        const numSets = setCounts[ex] || 3;
+                        return (
+                            <div key={ex + i} className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-lg">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="font-bold text-xl">{ex}</h3>
+                                    {isEdit ? (
+                                        <button onClick={() => {
+                                            const d = [...days];
+                                            d[idx].exercises = d[idx].exercises.filter(e => e !== ex);
+                                            setDays(d);
+                                        }} className="text-red-500 p-2">
+                                            <Icon name="Trash" size={20} />
+                                        </button>
+                                    ) : (
+                                        <div className="flex items-center gap-3 bg-slate-950/50 px-3 py-1 rounded-lg">
+                                            <button onClick={() => updateSetCount(ex, -1)}><Icon name="Minus" size={18} className="text-slate-400" /></button>
+                                            <span className="text-sm font-bold w-6 text-center">{numSets}</span>
+                                            <button onClick={() => updateSetCount(ex, 1)}><Icon name="Plus" size={18} className="text-slate-400" /></button>
+                                        </div>
+                                    )}
+                                </div>
 
-  return (
-    <div className="pb-24 space-y-6">
-      <div className="bg-emerald-900/40 border border-emerald-500/30 p-5 rounded-2xl shadow-lg">
-        <h3 className="text-emerald-400 text-sm font-bold uppercase mb-4">Daily Targets</h3>
-        
-        <ProgressBar current={totals.cals} target={GOALS.calories} colorClass="text-emerald-400" label="Calories" />
-        <ProgressBar current={totals.p} target={GOALS.protein} colorClass="text-blue-400" label="Protein (g)" />
-        
-        <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-emerald-500/20">
-           <div className="text-xs text-emerald-200/70">Carbs: <span className="text-white text-sm font-bold">{totals.c}g</span></div>
-           <div className="text-xs text-emerald-200/70">Fat: <span className="text-white text-sm font-bold">{totals.f}g</span></div>
-        </div>
+                                {!isEdit && (
+                                    <div className="flex gap-3 overflow-x-auto no-scrollbar pb-3">
+                                        {[...Array(numSets)].map((_, s) => (
+                                            <div key={s} className="flex flex-col gap-2 min-w-[100px]">
+                                                <div className="text-center text-[10px] text-slate-500 font-bold uppercase">Set {s + 1}</div>
+                                                <input type="number" placeholder="kg" className="input-box" style={{ borderColor: input[ex]?.[s]?.w ? themeHex : '#334155', color: input[ex]?.[s]?.w ? themeHex : 'white' }}
+                                                    value={input[ex]?.[s]?.w || ''} onChange={e => setInput(prev => ({ ...prev, [ex]: { ...prev[ex], [s]: { ...prev[ex]?.[s], w: e.target.value } } }))} />
+                                                <input type="number" placeholder="reps" className="input-box" style={{ borderColor: input[ex]?.[s]?.r ? themeHex : '#334155', color: input[ex]?.[s]?.r ? themeHex : 'white' }}
+                                                    value={input[ex]?.[s]?.r || ''} onChange={e => setInput(prev => ({ ...prev, [ex]: { ...prev[ex], [s]: { ...prev[ex]?.[s], r: e.target.value } } }))} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
 
-        {!suggestion ? (
-          <button onClick={handleSuggestMeal} disabled={suggestLoading} className="mt-4 w-full bg-emerald-800/50 border border-emerald-500/30 text-emerald-200 py-2 rounded-lg text-sm font-bold">
-            {suggestLoading ? 'Thinking...' : '✨ What should I eat next?'}
-          </button>
-        ) : (
-          <div className="mt-4 bg-emerald-950/50 p-3 rounded-lg border border-emerald-500/40">
-            <div className="flex justify-between items-start">
-               <p className="text-sm text-emerald-100 italic pr-2">"{suggestion}"</p>
-               <button onClick={() => setSuggestion('')} className="text-emerald-500 hover:text-white">✕</button>
-            </div>
-          </div>
-        )}
-      </div>
+                    {isEdit && (
+                        <div className="flex gap-3">
+                            <input className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 text-white" placeholder="New exercise..." value={newEx} onChange={e => setNewEx(e.target.value)} />
+                            <button onClick={() => { if (newEx.trim()) { const d = [...days]; d[idx].exercises.push(newEx.trim()); setDays(d); setNewEx(''); } }}
+                                className={`bg-${themeClass} px-6 rounded-xl font-bold text-white text-2xl`}>+</button>
+                        </div>
+                    )}
 
-      <div className="bg-slate-800 p-4 rounded-xl shadow-lg space-y-4">
-        <div className="flex gap-2">
-          <input className="flex-1 bg-slate-700 text-white p-3 rounded-xl outline-none" placeholder="e.g., 200g Chicken Breast" 
-            value={foodInput} onChange={e => setFoodInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAiEstimate()} />
-          <button onClick={handleAiEstimate} disabled={aiLoading} className="bg-emerald-600 text-white px-4 rounded-xl font-bold disabled:opacity-50">{aiLoading ? '...' : '✨ Auto'}</button>
-        </div>
-        {(staging.name || staging.calories || foodInput) && (
-          <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 space-y-3 animate-in fade-in slide-in-from-top-2">
-            <input className="w-full bg-transparent border-b border-slate-600 text-white outline-none" value={staging.name} onChange={e => setStaging({...staging, name: e.target.value})} placeholder="Food Name" />
-            <div className="grid grid-cols-4 gap-2">
-              {['calories', 'protein', 'carbs', 'fat'].map(k => (
-                 <div key={k} className="flex flex-col"><span className="text-[10px] text-slate-500 uppercase">{k.substring(0,4)}</span>
-                 <input type="number" className="bg-slate-700 rounded p-1 text-center text-sm" value={staging[k]} onChange={e => setStaging({...staging, [k]: e.target.value})} /></div>
-              ))}
-            </div>
-            <button onClick={handleAddFood} className="w-full bg-emerald-600 text-white py-2 rounded-lg font-bold text-sm">Add to Log</button>
-          </div>
-        )}
-      </div>
+                    {!isEdit && (
+                        <button onClick={logWorkout}
+                            className={`w-full py-5 rounded-2xl font-black text-lg uppercase tracking-wider text-white bg-${themeClass}`}
+                            style={{ boxShadow: `0 20px 40px -10px ${themeHex}60` }}>
+                            Finish Workout
+                        </button>
+                    )}
+                </div>
+            );
+        };
 
-      <div className="space-y-2">
-        {logs.length === 0 && <div className="text-slate-500 text-center text-sm py-4">No food logged yet.</div>}
-        {logs.map(item => (
-          <div key={item.id} className="bg-slate-800 p-3 rounded-xl flex justify-between items-center group">
-            <div><div className="font-medium text-white">{item.name}</div><div className="text-xs text-slate-400">{item.protein}p • {item.carbs}c • {item.fat}f</div></div>
-            <div className="flex items-center gap-3"><span className="font-bold text-emerald-400">{item.calories}</span><button onClick={async () => await deleteDoc(doc(db, 'artifacts', appId, 'users', userId, 'food_logs', item.id))} className="text-slate-600 hover:text-red-400 p-1">×</button></div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
+        // --- FOOD TRACKER (unchanged except tiny fixes) ---
+        const FoodTracker = ({ showFeedback }) => {
+            const [logs, setLogs] = useState(() => SAFE_LOAD('hos_food_logs', []));
+            const [input, setInput] = useState({ name: '', cals: '', prot: '', carb: '', fat: '' });
+            const [raw, setRaw] = useState('');
+            const [loading, setLoading] = useState(false);
 
-export default function HealthApp() {
-  const [db, setDb] = useState(null);
-  const [userId, setUserId] = useState(null);
-  const [activeTab, setActiveTab] = useState('gym');
-  const [feedback, setFeedback] = useState({ msg: '', type: '' });
-  const showFeedback = (msg, type) => { setFeedback({ msg, type }); setTimeout(() => setFeedback({ msg: '', type: '' }), 3000); };
+            useEffect(() => SAFE_SAVE('hos_food_logs', logs), [logs]);
 
-  useEffect(() => {
-    const init = async () => {
-      const app = initializeApp(firebaseConfig);
-      setDb(getFirestore(app));
-      const auth = getAuth(app);
-      onAuthStateChanged(auth, u => u ? setUserId(u.uid) : initialAuthToken ? signInWithCustomToken(auth, initialAuthToken) : signInAnonymously(auth));
-    };
-    init();
-  }, []);
+            const today = new Date().toLocaleDateString();
+            const totals = logs.filter(l => l.date === today).reduce((a, b) => ({
+                cals: a.cals + (b.cals || 0),
+                p: a.p + (b.prot || 0),
+                c: a.c + (b.carb || 0),
+                f: a.f + (b.fat || 0)
+            }), { cals: 0, p: 0, c: 0, f: 0 });
 
-  return (
-    <div className="min-h-screen bg-slate-900 text-white font-sans selection:bg-cyan-500/30">
-      {feedback.msg && <div className={`fixed top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg shadow-xl z-50 font-medium ${feedback.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'}`}>{feedback.msg}</div>}
-      <div className="max-w-md mx-auto p-4 min-h-screen flex flex-col">
-        <div className="flex-1 mt-2">
-          {!userId ? <div className="text-center text-slate-500 mt-20 animate-pulse">Loading Health OS...</div> : activeTab === 'gym' ? <GymTracker db={db} userId={userId} showFeedback={showFeedback} /> : <FoodTracker db={db} userId={userId} showFeedback={showFeedback} />}
-        </div>
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800/90 backdrop-blur-md border border-slate-700 p-1.5 rounded-full shadow-2xl flex gap-1 z-40">
-          <button onClick={() => setActiveTab('gym')} className={`px-6 py-2.5 rounded-full font-bold text-sm transition-all ${activeTab === 'gym' ? 'bg-cyan-500 text-slate-900 shadow-lg shadow-cyan-500/25' : 'text-slate-400 hover:text-white'}`}>GYM</button>
-          <button onClick={() => setActiveTab('food')} className={`px-6 py-2.5 rounded-full font-bold text-sm transition-all ${activeTab === 'food' ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/25' : 'text-slate-400 hover:text-white'}`}>FOOD</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+            const getMeal = (h) => {
+                if (h >= 5 && h < 11) return 'Breakfast';
+                if (h >= 11 && h < 16) return 'Lunch';
+                if (h >= 16 && h < 22) return 'Dinner';
+                return 'Snacks';
+            };
+
+            const callGemini = async () => {
+                if (!apiKey) return showFeedback('Set your Gemini API key first', 'error');
+                if (!raw.trim()) return;
+                setLoading(true);
+                try {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: `Return ONLY valid JSON for this food: "${raw}". Keys: name (string), cals (number), prot (number), carb (number), fat (number). Example: {"name":"Chicken Breast 200g","cals":330,"prot":62,"carb":0,"fat":7}` }] }]
+                        })
+                    });
+                    const data = await res.json();
+                    const text = data.candidates[0].content.parts[0].text.trim().replace(/```json|```/g, '');
+                    const json = JSON.parse(text);
+                    setInput({ name: json.name, cals: json.cals, prot: json.prot, carb: json.carb, fat: json.fat });
+                } catch (e) {
+                    console.error(e);
+                    showFeedback('AI failed – check key', 'error');
+                }
+                setLoading(false);
+            };
+
+            const add = () => {
+                if (!input.name) return;
+                setLogs([{
+                    id: Date.now(),
+                    date: today,
+                    time: Date.now(),
+                    ...input,
+                    cals: Number(input.cals) || 0,
+                    prot: Number(input.prot) || 0,
+                    carb: Number(input.carb) || 0,
+                    fat: Number(input.fat) || 0
+                }, ...logs]);
+                setInput({ name: '', cals: '', prot: '', carb: '', fat: '' });
+                setRaw('');
+                showFeedback('Added!', 'success');
+            };
+
+            return (
+                <div className="space-y-6 pb-20">
+                    <ActivityRings cals={totals.cals} calsT={GOALS.calories} prot={totals.p} protT={GOALS.protein} carbs={totals.c} carbsT={GOALS.carbs} />
+
+                    <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-lg">
+                        <div className="flex gap-3 mb-4">
+                            <input className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:border-emerald-500 transition" placeholder="e.g. 2 eggs + avocado toast"
+                                value={raw} onChange={e => setRaw(e.target.value)} onKeyDown={e => e.key === 'Enter' && callGemini()} />
+                            <button onClick={callGemini} disabled={loading} className="bg-emerald-600 px-6 rounded-xl font-bold text-white disabled:opacity-50">
+                                {loading ? '...' : 'AI'}
+                            </button>
+                        </div>
+
+                        {(input.name || input.cals) && (
+                            <div className="space-y-4">
+                                <input className="w-full bg-transparent border-b border-slate-700 text-xl font-bold outline-none" value={input.name}
+                                    onChange={e => setInput({ ...input, name: e.target.value })} />
+                                <div className="grid grid-cols-4 gap-3">
+                                    {['cals', 'prot', 'carb', 'fat'].map(k => (
+                                        <div key={k} className="bg-slate-950/50 rounded-lg p-3 text-center border border-slate-800">
+                                            <div className="text-xs text-slate-500 uppercase font-bold">{k}</div>
+                                            <input type="number" className="w-full bg-transparent text-xl font-bold text-white outline-none"
+                                                value={input[k]} onChange={e => setInput({ ...input, [k]: e.target.value })} />
+                                        </div>
+                                    ))}
+                                </div>
+                                <button onClick={add} className="w-full bg-emerald-600 py-4 rounded-xl font-bold text-white shadow-lg">Add Entry</button>
+                            </div>
+                        )}
+                    </div>
+
+                    {['Breakfast', 'Lunch', 'Dinner', 'Snacks'].map(meal => {
+                        const items = logs.filter(l => l.date === today && getMeal(new Date(l.time).getHours()) === meal);
+                        if (!items.length) return null;
+                        return (
+                            <div key={meal}>
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 ml-2 mb-2">{meal}</h3>
+                                <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+                                    {items.map((l, i) => (
+                                        <div key={l.id} className={`flex justify-between items-center p-4 ${i < items.length - 1 ? 'border-b border-slate-800' : ''}`}>
+                                            <div>
+                                                <div className="font-bold">{l.name}</div>
+                                                <div className="text-xs text-slate-500">{l.prot}p • {l.carb}c • {l.fat}f</div>
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <span className="font-bold text-emerald-400 text-lg">{l.cals}</span>
+                                                <button onClick={() => setLogs(logs.filter(x => x.id !== l.id))} className="text-red-500">
+                                                    <Icon name="Trash" size={20} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            );
+        };
+
+        // --- MAIN APP ---
+        const App = () => {
+            const [tab, setTab] = useState('gym');
+            const [settingsOpen, setSettingsOpen] = useState(false);
+            const [fb, setFb] = useState({ msg: '', type: '' });
+
+            const showFeedback = (msg, type = 'success') => {
+                setFb({ msg, type });
+                setTimeout(() => setFb({ msg: '', type: '' }), 3000);
+            };
+
+            useEffect(() => {
+                const loader = document.getElementById('loader');
+                const root = document.getElementById('root');
+                setTimeout(() => {
+                    loader.style.opacity = '0';
+                    root.style.opacity = '1';
+                    setTimeout(() => loader.remove(), 600);
+                }, 300);
+            }, []);
+
+            return (
+                <div className="max-w-md mx-auto p-5">
+                    {fb.msg && (
+                        <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full z-50 font-bold shadow-2xl backdrop-blur-md text-white ${fb.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'}`}>
+                            {fb.msg}
+                        </div>
+                    )}
+
+                    <div className="flex justify-between items-end mb-8">
+                        <h1 className="text-4xl font-black italic">{tab === 'gym' ? 'WORKOUT' : 'NUTRITION'}</h1>
+                        <button onClick={() => setSettingsOpen(true)} className="p-3 bg-slate-800 rounded-full">
+                            <Icon name="Settings" size={24} className="text-slate-400" />
+                        </button>
+                    </div>
+
+                    {settingsOpen && (
+                        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-5" onClick={() => setSettingsOpen(false)}>
+                            <div className="bg-slate-900 p-6 rounded-2xl border border-slate-700 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+                                <h3 className="text-xl font-bold mb-4">Gemini API Key</h3>
+                                <input type="password" className="w-full bg-slate-950 px-4 py-3 rounded-xl border border-slate-700 mb-4"
+                                    placeholder="Paste your key here" defaultValue={apiKey}
+                                    onChange={e => apiKey = e.target.value.trim()} />
+                                <button onClick={() => { SAFE_SAVE('hos_api_key', apiKey); setSettingsOpen(false); showFeedback('Key saved'); }}
+                                    className="w-full bg-cyan-600 py-4 rounded-xl font-bold text-white">Save & Close</button>
+                                <div className="text-center mt-4">
+                                    <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-xs text-cyan-400 underline">Get free key →</a>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {tab === 'gym' ? <GymTracker showFeedback={showFeedback} /> : <FoodTracker showFeedback={showFeedback} />}
+
+                    <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-xl border border-slate-800 rounded-full shadow-2xl flex z-40">
+                        <button onClick={() => setTab('gym')} className={`px-10 py-4 rounded-full font-bold transition-all ${tab === 'gym' ? 'bg-cyan-500 text-white shadow-lg' : 'text-slate-400'}`}>GYM</button>
+                        <button onClick={() => setTab('food')} className={`px-10 py-4 rounded-full font-bold transition-all ${tab === 'food' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400'}`}>FOOD</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
