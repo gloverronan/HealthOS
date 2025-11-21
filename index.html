@@ -140,7 +140,7 @@
           { val: fat, goal: goals.fat || 80, label: 'Fat', color: 'text-rose-400' }
         ].map((m, i) => (
           <div key={i} className="flex flex-col items-center">
-            <div className={`${m.color} font-bold text-sm whitespace-nowrap`}>{m.val || 0} <span className="text-slate-600">/ {m.goal}</span></div>
+            <div className={`${m.color} font-bold text-lg whitespace-nowrap`}>{m.val || 0} <span className="text-slate-600 text-xs">/ {m.goal}</span></div>
             <div className="text-xs font-black my-0.5">{Math.round(((m.val || 0) / m.goal) * 100)}%</div>
             <div className="text-[10px] text-slate-500 uppercase tracking-wider">{m.label}</div>
           </div>
@@ -433,7 +433,21 @@
       const [input, setInput] = useState('');
       const [loading, setLoading] = useState(false);
       const [result, setResult] = useState(null);
+      const [entryTime, setEntryTime] = useState(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+      const [category, setCategory] = useState('Snack');
       const today = new Date().toISOString().split('T')[0];
+
+      const getCategory = (time) => {
+        const hour = parseInt(time.split(':')[0]);
+        if (hour >= 5 && hour < 11) return 'Breakfast';
+        if (hour >= 11 && hour < 15) return 'Lunch';
+        if (hour >= 15 && hour < 22) return 'Dinner';
+        return 'Snack';
+      };
+
+      useEffect(() => {
+        setCategory(getCategory(entryTime));
+      }, [entryTime]);
 
       // Check key readiness
       const isAiReady = isConfigLoaded && GEMINI_KEY;
@@ -479,7 +493,9 @@
             cals: Number(result.cals) || 0,
             prot: Number(result.prot) || 0,
             carb: Number(result.carb) || 0,
-            fat: Number(result.fat) || 0
+            fat: Number(result.fat) || 0,
+            time: entryTime,
+            category: category
           });
           setInput('');
           setResult(null);
@@ -493,11 +509,21 @@
       return (
         <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 mb-8 border border-slate-700">
           <div className="flex gap-3 mb-4">
-            <input className="flex-1 bg-slate-950/70 border border-slate-700 rounded-xl px-5 py-4 text-lg placeholder-slate-500 focus:border-emerald-500 transition"
-              placeholder={isConfigLoaded ? "What did you eat?" : "Loading config..."}
-              value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && analyze()}
-              disabled={!isConfigLoaded} />
-            <button onClick={analyze} disabled={loading || !isAiReady} className="bg-emerald-600 px-8 rounded-xl font-bold disabled:opacity-50 hover:bg-emerald-500 transition-colors">
+            <div className="flex-1 flex flex-col gap-2">
+              <input className="w-full bg-slate-950/70 border border-slate-700 rounded-xl px-5 py-4 text-lg placeholder-slate-500 focus:border-emerald-500 transition"
+                placeholder={isConfigLoaded ? "What did you eat?" : "Loading config..."}
+                value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && analyze()}
+                disabled={!isConfigLoaded} />
+              <div className="flex gap-2">
+                <input type="time" className="bg-slate-950/70 border border-slate-700 rounded-xl px-4 py-2 text-slate-300 outline-none focus:border-emerald-500"
+                  value={entryTime} onChange={e => setEntryTime(e.target.value)} />
+                <select className="flex-1 bg-slate-950/70 border border-slate-700 rounded-xl px-4 py-2 text-slate-300 outline-none focus:border-emerald-500 appearance-none"
+                  value={category} onChange={e => setCategory(e.target.value)}>
+                  {['Breakfast', 'Lunch', 'Dinner', 'Snack'].map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+            <button onClick={analyze} disabled={loading || !isAiReady} className="bg-emerald-600 px-8 rounded-xl font-bold disabled:opacity-50 hover:bg-emerald-500 transition-colors h-auto">
               {loading ? '...' : (!isAiReady ? 'Wait...' : 'AI')}
             </button>
           </div>
