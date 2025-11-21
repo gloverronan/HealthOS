@@ -125,13 +125,14 @@
     };
 
     // --- COMPONENT: ACTIVITY RINGS (HELPER) ---
+    const Ring = ({ r, progress, color }) => {
+      const circum = 2 * Math.PI * r;
+      const dash = (progress / 100) * circum;
+      return <circle cx="128" cy="128" r={r} stroke={color} strokeWidth="14" fill="none" strokeDasharray={circum} strokeDashoffset={circum - dash} strokeLinecap="round" className="-rotate-90 transition-all duration-1000" style={{ filter: `drop-shadow(0 0 8px ${color})` }} />;
+    };
+
     const ActivityRings = ({ cals, prot, carb, goals }) => {
       const pct = (v, g) => Math.min(100, (v / g) * 100);
-      const Ring = ({ r, progress, color }) => {
-        const circum = 2 * Math.PI * r;
-        const dash = (progress / 100) * circum;
-        return <circle cx="128" cy="128" r={r} stroke={color} strokeWidth="14" fill="none" strokeDasharray={circum} strokeDashoffset={circum - dash} strokeLinecap="round" className="-rotate-90 transition-all duration-1000" style={{ filter: `drop-shadow(0 0 8px ${color})` }} />;
-      };
 
       return (
         <div className="relative w-64 h-64 mx-auto mb-8">
@@ -499,9 +500,9 @@
               <div className="space-y-3">
                 {Object.entries(logData[ex] || {}).map(([id, set]) => (
                   <div key={id} className="flex gap-3">
-                    <input type="number" placeholder="kg" className="flex-1 bg-slate-950/70 rounded-lg px-4 py-3 text-center font-bold"
+                    <input key="weight" type="number" placeholder="kg" className="flex-1 bg-slate-950/70 rounded-lg px-4 py-3 text-center font-bold"
                       value={set.w} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [id]: { ...set, w: e.target.value } } }))} />
-                    <input type="number" placeholder="reps" className="w-24 bg-slate-950/70 rounded-lg px-4 py-3 text-center font-bold"
+                    <input key="reps" type="number" placeholder="reps" className="w-24 bg-slate-950/70 rounded-lg px-4 py-3 text-center font-bold"
                       value={set.r} onChange={e => setLogData(prev => ({ ...prev[ex], [id]: { ...set, r: e.target.value } }))} />
                     <button onClick={() => setLogData(prev => { const newEx = { ...prev[ex] }; delete newEx[id]; return { ...prev, [ex]: newEx }; })}
                       className="text-red-500">×</button>
@@ -538,7 +539,7 @@
         const timeMin = parseFloat(time);
         if (isNaN(dist) || isNaN(timeMin) || dist <= 0 || timeMin <= 0) return showToast('Invalid numbers', 'error');
 
-        const calories = type === 'run' ? Math.round(dist * 100) : type === 'cycle' ? Math.round(dist * 40) : type === 'run' ? Math.round(dist * 60) : 0; // Fixed: added 0 fallback
+        const calories = type === 'run' ? Math.round(dist * 100) : type === 'cycle' ? Math.round(dist * 40) : type === 'swim' ? Math.round(dist * 60) : 0; // Fixed: added 0 fallback
 
         const baseRef = DB.collection('users').doc(userId).collection('cardio_logs');
         try {
