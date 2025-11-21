@@ -30,6 +30,11 @@
     #loader { position: fixed; inset: 0; background: #020617; z-index: 9999; display: flex; align-items: center; justify-content: center; transition: opacity 0.7s; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .input-box {
+        background-color: #1e293b; border: 1px solid #334155; border-radius: 12px;
+        text-align: center; color: white; font-weight: 600; font-size: 16px;
+        width: 100%; height: 44px; outline: none; transition: all 0.2s;
+    }
   </style>
 </head>
 <body class="min-h-screen">
@@ -47,11 +52,25 @@
 <script type="text/babel">
   const { useState, useEffect, useMemo } = React;
 
-  // --- LOCAL STORAGE HELPERS (FOR KEYS AND CONFIG) ---
+  // --- LOCAL STORAGE HELPERS ---
   const loadItem = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) || def; } catch { return def; } };
   const saveItem = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
   const loadKey = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
   const saveKey = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+
+  // --- 1. HARDCODED CONFIG (ADMIN SECTION) ---
+  // The Gemini API Key must be stored here once by the administrator for the first upload.
+  const HARDCODED_GEMINI_KEY = "AIzaSyDDwIpH-oAS-S5qWWi1B-hapOxjuiMVVWg"; // PASTE YOUR GEMINI API KEY HERE ONCE
+
+  // Firebase Configuration (Required to be hardcoded for initial connection)
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyBUiU8DmIgQH843AqqM4oiK22i4p2UJdp0",
+    authDomain: "healthos-3d23f.firebaseapp.com",
+    projectId: "healthos-3d23f",
+    appId: "1:1071494735916:web:65d641926c7511ee5c4989",
+  };
+  
+  // --- END HARDCODED CONFIG ---
 
   const GOALS = { calories: 2350, protein: 180, carbs: 250 };
   let GEMINI_KEY = loadKey('hos_gemini_key'); 
@@ -69,7 +88,7 @@
 
   // --- COMPONENT: ICONS ---
   const Icon = ({ name, size=24, className, onClick }) => {
-      const i = { Trash: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />, Settings: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+      const i = { Trash: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />, Settings: <path strokeLinecap="round" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
             };
             return <svg className={`w-${size/4} h-${size/4} ${className}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" onClick={onClick}>{i[name]}</svg>;
         };
@@ -119,15 +138,14 @@
       try {
         if (mode === 'signup') {
           await AUTH.createUserWithEmailAndPassword(email, password);
-          showToast('Account created! Logging in...', 'success');
         } else {
           await AUTH.signInWithEmailAndPassword(email, password);
-          showToast('Logged in successfully!', 'success');
         }
+        showToast('Logged in successfully!', 'success');
         onAuthSuccess();
 
       } catch (e) {
-        let msg = "Authentication failed. Check credentials.";
+        let msg = "Authentication failed. Check credentials and ensure Email/Password is enabled in Firebase.";
         if (e.code) {
           msg = e.message.replace('Firebase:', '').trim();
         }
@@ -143,11 +161,10 @@
         try {
             const provider = new firebase.auth.GoogleAuthProvider();
             await AUTH.signInWithPopup(provider);
-            showToast('Signed in with Google!', 'success');
             onAuthSuccess();
         } catch (e) {
             if (e.code !== 'auth/popup-closed-by-user') {
-                setError('Google sign-in failed. Try email/password or check Firebase setup.');
+                setError('Google sign-in failed. Ensure Google provider is enabled in Firebase.');
             }
         } finally {
             setIsLoading(false);
@@ -188,9 +205,8 @@
   };
 
   // --- SETTINGS MODAL ---
-  const SettingsModal = ({ isVisible, onClose, onSave, currentKey, currentDbConfig }) => {
+  const SettingsModal = ({ isVisible, onClose, onSave, currentKey }) => {
     const [keyInput, setKeyInput] = useState(currentKey);
-    const [dbConfig, setDbConfig] = useState(currentDbConfig);
     const [isChecking, setIsChecking] = useState(false);
 
     if (!isVisible) return null;
@@ -206,59 +222,30 @@
         } catch { return false; }
     };
 
-    const checkDbValidity = async (config) => {
-        if (!config.projectId) return true;
-        let tempApp = null;
-        try {
-            const tempAppName = 'temp_check_' + Date.now();
-            tempApp = firebase.initializeApp(config, tempAppName);
-            const tempDb = tempApp.firestore();
-            await tempDb.collection('metadata').doc('test').get();
-            return true;
-        } catch (e) {
-            console.error("DB Check Failed:", e);
-            return false;
-        } finally {
-            if (tempApp) tempApp.delete();
-        }
-    };
-
     const handleSave = async () => {
         setIsChecking(true);
-        
         let keyStatus = await checkKey(keyInput);
-        let dbStatus = await checkDbValidity(dbConfig);
-        
         setIsChecking(false);
 
-        if (keyStatus && dbStatus) {
-            onSave(keyInput, dbConfig, 'Settings saved and verified!', 'success');
+        if (keyStatus) {
+            onSave(keyInput, 'Gemini Key saved and verified!', 'success');
         } else {
-            onSave(keyInput, dbConfig, 'Validation failed: ' + (!keyStatus ? 'Gemini Key Invalid. ' : '') + (!dbStatus ? 'Database Config Invalid.' : ''), 'error');
+            onSave(keyInput, 'Validation failed: Gemini Key Invalid.', 'error');
         }
     };
-
-    const updateConfig = (field, value) => setDbConfig(prev => ({...prev, [field]: value}));
 
     return (
       <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in" onClick={onClose}>
         <div className="bg-slate-900/90 border border-slate-700 p-6 rounded-xl w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
-          <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pb-2">Application Settings</h3>
+          <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pb-2">AI Settings (Shared Key)</h3>
           
-          <p className="text-sm text-cyan-400 mb-4 font-bold">Persistence (Firestore Config)</p>
-          <div className="space-y-3 mb-6">
-            {['apiKey', 'authDomain', 'projectId', 'appId'].map(field => (
-                <input key={field} type="text" className="w-full bg-slate-950 text-white p-3 rounded-xl border border-slate-700 outline-none focus:border-cyan-500 text-sm" placeholder={`Firebase Config: ${field}`} value={dbConfig[field] || ''} onChange={e => updateConfig(field, e.target.value)} />
-            ))}
-            <p className="text-xs text-slate-500 pt-2">Input your 4 core config parameters here to enable persistent cloud storage.</p>
-          </div>
-          
-          <p className="text-sm text-emerald-400 mb-4 font-bold border-t border-slate-700 pt-4">AI Calorie Estimation (Gemini)</p>
-          <input type="password" className="w-full bg-slate-950 text-white p-3 rounded-xl border border-slate-700 mb-4 outline-none focus:border-emerald-500" placeholder="Gemini API Key" value={keyInput} onChange={e => setKeyInput(e.target.value)} disabled={isChecking} />
+          <p className="text-sm text-emerald-400 mb-4 font-bold pt-4">Gemini API Key</p>
+          <input type="password" className="w-full bg-slate-950 text-white p-3 rounded-xl border border-slate-700 mb-4 outline-none focus:border-emerald-500" placeholder="Paste Key Here (Will be shared in the cloud)" value={keyInput} onChange={e => setKeyInput(e.target.value)} disabled={isChecking} />
           
           <button onClick={handleSave} disabled={isChecking} className="w-full bg-cyan-600 py-3 rounded-xl font-bold text-lg hover:bg-cyan-500 transition-colors disabled:opacity-50 mt-4">
-            {isChecking ? 'Verifying...' : 'Verify & Save All Settings'}
+            {isChecking ? 'Verifying...' : 'Verify & Share Key'}
           </button>
+          <p className="text-xs text-slate-500 mt-2">The Gemini Key will be stored in your Firebase cloud config and shared with anyone who logs into this app.</p>
           <div className="text-center mt-4">
             <button onClick={onClose} className="text-slate-500 hover:text-white text-sm">Close</button>
           </div>
@@ -475,7 +462,7 @@
                   <input type="number" placeholder="kg" className="flex-1 bg-slate-950/70 rounded-lg px-4 py-3 text-center font-bold"
                          value={set.w} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [id]: { ...set, w: e.target.value } } }))} />
                   <input type="number" placeholder="reps" className="w-24 bg-slate-950/70 rounded-lg px-4 py-3 text-center font-bold"
-                         value={set.r} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [id]: { ...set, r: e.target.value } } }))} />
+                         value={set.r} onChange={e => setLogData(prev => ({ ...prev[ex], [id]: { ...set, r: e.target.value } } ))} />
                   <button onClick={() => setLogData(prev => { const newEx = { ...prev[ex] }; delete newEx[id]; return { ...prev, [ex]: newEx }; })}
                           className="text-red-500">×</button>
                 </div>
@@ -570,13 +557,13 @@
     const [showSettings, setShowSettings] = useState(false);
     
     // Persistence States
-    const [dbConfig, setDbConfig] = useState(loadItem('hos_db_config', {}));
+    const [dbConfig, setDbConfig] = useState(FIREBASE_CONFIG); // Hardcoded DB config
     const [isDbInitialized, setIsDbInitialized] = useState(false);
     const [userId, setUserId] = useState(null);
-    const [isLoggedIn, setIsLoggedIn] = useState(false); // TRUE if not anonymous
+    const [isLoggedIn, setIsLoggedIn] = useState(false); // TRUE if permanent user
     const [connectionFailed, setConnectionFailed] = useState(false); 
+    const [cloudConfig, setCloudConfig] = useState(null); // Stores shared settings (e.g., GEMINI_KEY)
 
-    // isReady is the crucial state: DB is connected AND we have a userId
     const isReady = isDbInitialized && userId;
     const today = new Date().toISOString().split('T')[0];
 
@@ -584,6 +571,47 @@
       setToast({ msg, type });
       setTimeout(() => setToast(null), 3000);
     };
+
+    // --- CLOUD CONFIGURATION MANAGEMENT ---
+    const loadSharedConfig = async (uid) => {
+        if (!DB) return;
+        try {
+            const doc = await DB.collection('app_config').doc('shared_keys').get();
+            if (doc.exists) {
+                setCloudConfig(doc.data());
+                GEMINI_KEY = doc.data().geminiKey || '';
+                saveKey('hos_gemini_key', GEMINI_KEY);
+            } else {
+                // If doc doesn't exist, and this is the first admin login, we check script key
+                if (HARDCODED_GEMINI_KEY) {
+                    await saveSharedConfig(HARDCODED_GEMINI_KEY);
+                } else {
+                    setCloudConfig({}); // Key must be input via settings
+                }
+            }
+        } catch (e) {
+            console.error("Error loading shared config:", e);
+            showToast('Could not load shared app settings.', 'error');
+        }
+    };
+    
+    // Save the new key/config to the cloud for others
+    const saveSharedConfig = async (newKey) => {
+        if (!DB || !AUTH.currentUser) return;
+        try {
+            await DB.collection('app_config').doc('shared_keys').set({
+                geminiKey: newKey,
+                updatedBy: AUTH.currentUser.email || AUTH.currentUser.uid,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            showToast('Cloud settings updated!', 'success');
+            loadSharedConfig(userId); // Refresh local state
+        } catch (e) {
+            showToast('Failed to save shared settings. Check Security Rules.', 'error');
+            console.error("Error saving shared config:", e);
+        }
+    };
+
 
     // --- FIREBASE INITIALIZATION ---
     useEffect(() => {
@@ -593,7 +621,6 @@
         }
         
         const initializeDb = () => {
-             // We MUST delete existing app instances to prevent "App already exists" errors when config changes
              const existingApp = firebase.apps.find(app => app.name === dbConfig.projectId);
              if (existingApp) { existingApp.delete(); }
 
@@ -607,18 +634,16 @@
                     if (user) {
                         USER_ID = user.uid;
                         setUserId(USER_ID);
-                        setIsLoggedIn(user.isAnonymous === false); // True if signed up/logged in
+                        setIsLoggedIn(true); // Always true since Anonymous is disabled
                         setIsDbInitialized(true);
                         setConnectionFailed(false);
-                        // Hide login if permanently logged in
-                        document.getElementById('loader-status').innerText = user.isAnonymous ? 'ANONYMOUS' : 'LOGGED IN';
-                    } else if (dbConfig.projectId) {
-                        // Attempt Anonymous Sign-in if no user is found
-                        AUTH.signInAnonymously().catch(e => {
-                            console.error("Auth Failed:", e);
-                            document.getElementById('loader-status').innerText = 'AUTH FAILED';
-                            setConnectionFailed(true);
-                        });
+                        document.getElementById('loader-status').innerText = 'LOGGED IN';
+                        loadSharedConfig(USER_ID);
+                    } else {
+                        setUserId(null); 
+                        setIsLoggedIn(false);
+                        setIsDbInitialized(true); // DB is ready, just waiting for user
+                        document.getElementById('loader-status').innerText = 'AWAITING LOGIN';
                     }
                 });
             } catch (e) {
@@ -640,8 +665,7 @@
         const unsubFood = logRef.doc('food_logs').collection('logs').onSnapshot(snapshot => {
             setFoodLog(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || b.id) - (a.timestamp?.seconds || a.id)));
         }, (error) => {
-            console.error("Firestore Food Listener Failed:", error);
-            showToast('Data sync failed. Check Security Rules.', 'error');
+            showToast('Food data sync failed.', 'error');
         });
         const unsubGym = logRef.doc('gym_logs').collection('logs').onSnapshot(snapshot => {
             setGymLog(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || b.id) - (a.timestamp?.seconds || a.id)));
@@ -652,10 +676,6 @@
 
         return () => { unsubFood(); unsubGym(); unsubCardio(); };
     }, [isReady, userId]);
-
-    // --- LOGIC AND DATA ---
-    useEffect(() => { saveItem('hos_workouts', workouts); }, [workouts]);
-    useEffect(() => { saveItem('hos_db_config', dbConfig); }, [dbConfig]);
 
     // --- LOADER HIDE LOGIC (FAILSAFE) ---
     useEffect(() => {
@@ -672,14 +692,10 @@
         }
       };
 
-      if (isReady) {
+      if (isReady || connectionFailed || !dbConfig.projectId) {
           clearTimeout(loaderTimer);
-          hideLoader('READY');
-      } else if (connectionFailed || !dbConfig.projectId) {
-          clearTimeout(loaderTimer);
-          hideLoader(connectionFailed ? 'ERROR' : 'SETUP REQUIRED');
+          hideLoader(isReady ? 'READY' : connectionFailed ? 'ERROR' : 'SETUP REQUIRED');
       } else {
-          // If neither ready nor failed after 5s, force fail
           loaderTimer = setTimeout(() => {
               setConnectionFailed(true);
           }, 5000);
@@ -704,19 +720,24 @@
       return { food, gym, cardio, totals };
     }, [foodLog, gymLog, cardioLog, today]);
 
-    const handleSettingsSave = (gemini, dbCfg, msg, type) => {
-        GEMINI_KEY = gemini;
-        saveKey('hos_gemini_key', GEMINI_KEY);
-        setDbConfig(dbCfg);
+    const handleSettingsSave = (gemini, msg, type) => {
+        saveKey('hos_gemini_key', gemini);
         setShowSettings(false);
         showToast(msg, type);
+
+        if (AUTH.currentUser) {
+            saveSharedConfig(gemini);
+        }
     };
     
     const handleLogout = async () => {
-        // Sign out permanent user, which triggers onAuthStateChanged, which signs in anonymously
         await AUTH.signOut();
+        setUserId(null);
         showToast('Logged out.', 'success');
     };
+    
+    // Determine if the app is usable or blocked
+    const isAppUsable = isReady && isLoggedIn;
 
     return (
       <div className="max-w-md mx-auto min-h-screen pb-32 px-6 pt-8">
@@ -736,32 +757,36 @@
         {/* AUTH CHECK: Show login/signup if not permanently logged in */}
         {isReady && !isLoggedIn && (
             <div className="fixed inset-0 bg-black/80 z-40 flex items-center justify-center">
-                <AuthModal showToast={showToast} onAuthSuccess={() => setIsLoggedIn(true)} />
+                <AuthModal showToast={showToast} onAuthSuccess={() => { /* onAuthStateChanged handles state update */ }} />
             </div>
         )}
         
         {/* SETTINGS MODAL */}
-        <SettingsModal isVisible={showSettings} onClose={() => setShowSettings(false)} onSave={handleSettingsSave} currentKey={GEMINI_KEY} currentDbConfig={dbConfig} />
+        <SettingsModal isVisible={showSettings} onClose={() => setShowSettings(false)} onSave={handleSettingsSave} currentKey={GEMINI_KEY} currentDbConfig={FIREBASE_CONFIG} />
 
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-5xl font-black">{tab === 'food' ? 'FOOD' : tab === 'gym' ? 'GYM' : tab === 'cardio' ? 'CARDIO' : 'SUMMARY'}</h1>
-          
-          <div className="flex items-center space-x-3">
-            {isLoggedIn && (
-                <button onClick={handleLogout} className="p-2 bg-slate-800 rounded-full text-red-400 hover:bg-slate-700 text-sm">
-                    Logout
+        {/* MAIN UI (BLOCKED IF NOT LOGGED IN) */}
+        <div className={!isAppUsable ? 'opacity-20 pointer-events-none' : ''}>
+            <div className="flex justify-between items-center mb-8">
+              <h1 className="text-5xl font-black">{tab === 'food' ? 'FOOD' : tab === 'gym' ? 'GYM' : tab === 'cardio' ? 'CARDIO' : 'SUMMARY'}</h1>
+              
+              <div className="flex items-center space-x-3">
+                {isLoggedIn && (
+                    <button onClick={handleLogout} className="p-2 bg-slate-800 rounded-full text-red-400 hover:bg-slate-700 text-sm">
+                        Logout
+                    </button>
+                )}
+                <button onClick={() => setShowSettings(true)} className="p-3 bg-slate-800 rounded-full">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 </button>
-            )}
-            <button onClick={() => setShowSettings(true)} className="p-3 bg-slate-800 rounded-full">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-            </button>
-          </div>
-        </div>
+              </div>
+            </div>
 
-        {tab === 'summary' && <SummaryTab data={todaysData} allFood={foodLog} allGym={gymLog} allCardio={cardioLog} />}
-        {tab === 'food' && <FoodTab data={todaysData} isReady={isReady} userId={userId} showToast={showToast} />}
-        {tab === 'gym' && <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} />}
-        {tab === 'cardio' && <CardioTab isReady={isReady} userId={userId} showToast={showToast} />}
+            {tab === 'summary' && <SummaryTab data={todaysData} allFood={foodLog} allGym={gymLog} allCardio={cardioLog} />}
+            {tab === 'food' && <FoodTab data={todaysData} isReady={isReady} userId={userId} showToast={showToast} />}
+            {tab === 'gym' && <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} />}
+            {tab === 'cardio' && <CardioTab isReady={isReady} userId={userId} showToast={showToast} />}
+        </div>
+        
 
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-2xl border border-slate-800 rounded-full shadow-2xl flex z-50">
           <button onClick={() => setTab('summary')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'summary' ? 'bg-cyan-600 text-white' : 'text-slate-500'}`}>Summary</button>
