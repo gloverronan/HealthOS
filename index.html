@@ -462,6 +462,25 @@
       const [logData, setLogData] = useState({});
       const today = new Date().toISOString().split('T')[0];
 
+      // Initialize 3 sets for each exercise when workout changes
+      useEffect(() => {
+        setLogData(prev => {
+          const next = { ...prev };
+          let changed = false;
+          selected.exercises.forEach(ex => {
+            if (!next[ex]) {
+              const sets = {};
+              // Use a base timestamp and offset to ensure unique, sortable IDs
+              const base = Date.now();
+              for (let i = 0; i < 3; i++) sets[base + i] = { w: '', r: '' };
+              next[ex] = sets;
+              changed = true;
+            }
+          });
+          return changed ? next : prev;
+        });
+      }, [selected]);
+
       const finishWorkout = async () => {
         if (!isReady || !userId) return showToast('Database not ready.', 'error');
 
@@ -504,25 +523,33 @@
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-xl">{ex}</h3>
                 <button onClick={() => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [Date.now()]: { w: '', r: '' } } }))}
-                  className="text-cyan-400 text-2xl">+</button>
+                  className="text-cyan-400 text-sm font-bold">+ ADD SET</button>
               </div>
-              <div className="space-y-3">
-                {Object.entries(logData[ex] || {}).map(([id, set]) => (
-                  <div key={id} className="flex gap-3">
-                    <input key="weight" type="number" placeholder="kg" className="flex-1 bg-slate-950/70 rounded-lg px-4 py-3 text-center font-bold"
-                      value={set.w} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [id]: { ...set, w: e.target.value } } }))} />
-                    <input key="reps" type="number" placeholder="reps" className="w-24 bg-slate-950/70 rounded-lg px-4 py-3 text-center font-bold"
-                      value={set.r} onChange={e => setLogData(prev => ({ ...prev[ex], [id]: { ...set, r: e.target.value } }))} />
-                    <button onClick={() => setLogData(prev => { const newEx = { ...prev[ex] }; delete newEx[id]; return { ...prev, [ex]: newEx }; })}
-                      className="text-red-500">×</button>
-                  </div>
-                ))}
-                {(!logData[ex] || Object.keys(logData[ex]).length === 0) && (
-                  <button onClick={() => setLogData(prev => ({ ...prev, [ex]: { [Date.now()]: { w: '', r: '' } } }))}
-                    className="w-full py-4 border-2 border-dashed border-slate-600 rounded-xl text-slate-400">
-                    + Add Set
-                  </button>
-                )}
+              <div className="grid grid-cols-3 gap-3">
+                {/* Headers */}
+                <div className="text-xs text-slate-500 uppercase text-center">Set</div>
+                <div className="text-xs text-slate-500 uppercase text-center">Kg</div>
+                <div className="text-xs text-slate-500 uppercase text-center">Reps</div>
+
+                {/* Sets */}
+                {Object.entries(logData[ex] || {})
+                  .sort(([a], [b]) => a - b) // Sort by ID (timestamp) to ensure stable order
+                  .map(([id, set], idx) => (
+                    <React.Fragment key={id}>
+                      <div className="flex items-center justify-center text-slate-400 font-bold text-sm">
+                        {idx + 1}
+                      </div>
+                      <input key={`weight-${id}`} type="number" placeholder="-" className="bg-slate-950/70 rounded-lg py-2 text-center font-bold outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all"
+                        value={set.w} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [id]: { ...set, w: e.target.value } } }))} />
+                      <div className="relative">
+                        <input key={`reps-${id}`} type="number" placeholder="-" className="w-full bg-slate-950/70 rounded-lg py-2 text-center font-bold outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all"
+                          value={set.r} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [id]: { ...set, r: e.target.value } } }))} />
+                        {/* Delete button absolute positioned to not break grid */}
+                        <button onClick={() => setLogData(prev => { const newEx = { ...prev[ex] }; delete newEx[id]; return { ...prev, [ex]: newEx }; })}
+                          className="absolute -right-2 -top-2 text-red-500 bg-slate-900 rounded-full w-5 h-5 flex items-center justify-center text-xs border border-slate-700 opacity-0 hover:opacity-100 transition-opacity">×</button>
+                      </div>
+                    </React.Fragment>
+                  ))}
               </div>
             </div>
           ))}
