@@ -58,9 +58,7 @@
   const loadKey = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
   const saveKey = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
-  // --- 1. HARDCODED CONFIG (ADMIN SECTION) ---
-  const HARDCODED_GEMINI_KEY = ""; // KEY REMOVED FROM PUBLIC SCRIPT
-
+  // --- 1. HARDCODED CONFIG ---
   const FIREBASE_CONFIG = {
     apiKey: "AIzaSyBUiU8DmIgQH843AqqM4oiK22i4p2UJdp0",
     authDomain: "healthos-3d23f.firebaseapp.com",
@@ -70,8 +68,9 @@
   
   // --- END HARDCODED CONFIG ---
 
-  const GOALS = { calories: 2350, protein: 180, carbs: 250 };
-  let GEMINI_KEY = loadKey('hos_gemini_key'); 
+  const DEFAULT_GOALS = { calories: 2350, protein: 180, carbs: 250 }; 
+  const GOALS = DEFAULT_GOALS; 
+  let GEMINI_KEY = ''; // Cloud managed
 
   const DEFAULT_WORKOUTS = [
     { id: "push", name: "Push", color: "#ec4899", exercises: ["Bench Press", "Overhead Press", "Tricep Extensions"] },
@@ -86,13 +85,13 @@
 
   // --- COMPONENT: ICONS ---
   const Icon = ({ name, size=24, className, onClick }) => {
-      const i = { Trash: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />, Settings: <path strokeLinecap="round" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+      const i = { Trash: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />, Settings: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
             };
             return <svg className={`w-${size/4} h-${size/4} ${className}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" onClick={onClick}>{i[name]}</svg>;
         };
 
   // --- COMPONENT: ACTIVITY RINGS (HELPER) ---
-  const ActivityRings = ({ cals, prot, carb }) => {
+  const ActivityRings = ({ cals, prot, carb, goals }) => {
     const pct = (v, g) => Math.min(100, (v / g) * 100);
     const Ring = ({ r, progress, color }) => {
       const circum = 2 * Math.PI * r;
@@ -106,9 +105,9 @@
           <circle cx="128" cy="128" r="110" stroke="#1e293b" strokeWidth="14" fill="none" opacity="0.3"/>
           <circle cx="128" cy="128" r="90" stroke="#1e293b" strokeWidth="14" fill="none" opacity="0.3"/>
           <circle cx="128" cy="128" r="70" stroke="#1e293b" strokeWidth="14" fill="none" opacity="0.3"/>
-          <Ring r={110} progress={pct(cals, GOALS.calories)} color="#10b981" />
-          <Ring r={90} progress={pct(prot, GOALS.protein)} color="#3b82f6" />
-          <Ring r={70} progress={pct(carb, GOALS.carbs)} color="#f59e0b" />
+          <Ring r={110} progress={pct(cals, goals.calories)} color="#10b981" />
+          <Ring r={90} progress={pct(prot, goals.protein)} color="#3b82f6" />
+          <Ring r={70} progress={pct(carb, goals.carbs)} color="#f59e0b" />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center text-center">
           <div>
@@ -121,7 +120,7 @@
   };
 
   // --- AUTH MODAL ---
-  const AuthModal = ({ showToast, onAuthSuccess }) => {
+  const AuthModal = ({ showToast }) => {
     const [mode, setMode] = useState('login'); 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -140,7 +139,6 @@
           await AUTH.signInWithEmailAndPassword(email, password);
         }
         showToast('Logged in successfully!', 'success');
-        onAuthSuccess();
 
       } catch (e) {
         let msg = "Authentication failed. Check credentials and ensure Email/Password is enabled in Firebase.";
@@ -159,7 +157,6 @@
         try {
             const provider = new firebase.auth.GoogleAuthProvider();
             await AUTH.signInWithPopup(provider);
-            onAuthSuccess();
         } catch (e) {
             if (e.code !== 'auth/popup-closed-by-user') {
                 setError('Google sign-in failed. Ensure Google provider is enabled in Firebase.');
@@ -203,60 +200,55 @@
   };
 
   // --- SETTINGS MODAL ---
-  const SettingsModal = ({ isVisible, onClose, onSave, currentKey, isAdmin }) => {
-    const [keyInput, setKeyInput] = useState(currentKey);
-    const [isChecking, setIsChecking] = useState(false);
+  const SettingsModal = ({ isVisible, onClose, onSave, currentKey, goals, setGoals }) => {
+    const [localGoals, setLocalGoals] = useState(goals);
+    
+    // Update local state when prop changes (after cloud load)
+    useEffect(() => {
+        setLocalGoals(goals);
+    }, [goals]);
 
     if (!isVisible) return null;
 
-    const checkKey = async (key) => {
-        if (!key.trim()) return true;
+    const handleSaveGoals = async () => {
         try {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${key}`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: "test" }] }] })
-            });
-            return res.ok;
-        } catch { return false; }
-    };
-
-    const handleSave = async () => {
-        setIsChecking(true);
-        let keyStatus = await checkKey(keyInput);
-        setIsChecking(false);
-
-        if (keyStatus) {
-            onSave(keyInput, 'Gemini Key saved and verified!', 'success');
-        } else {
-            onSave(keyInput, 'Validation failed: Gemini Key Invalid.', 'error');
+            await DB.collection('users').doc(AUTH.currentUser.uid).collection('settings').doc('profile').set({ goals: localGoals }, { merge: true });
+            setGoals(localGoals); // Update state in App
+            onClose();
+            showToast('Personal goals saved!', 'success');
+        } catch {
+            showToast('Failed to save goals to cloud.', 'error');
         }
     };
 
     return (
       <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in" onClick={onClose}>
         <div className="bg-slate-900/90 border border-slate-700 p-6 rounded-xl w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
-          <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pb-2">AI Settings (Shared Key)</h3>
+          <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pb-2">Application Settings</h3>
           
-          {isAdmin ? (
-            <>
-                <p className="text-sm text-emerald-400 mb-4 font-bold pt-4">Gemini API Key (Admin Access)</p>
-                <input type="password" className="w-full bg-slate-950 text-white p-3 rounded-xl border border-slate-700 mb-4 outline-none focus:border-emerald-500" placeholder="Paste Key Here (Will be shared in the cloud)" value={keyInput} onChange={e => setKeyInput(e.target.value)} disabled={isChecking} />
-                <button onClick={handleSave} disabled={isChecking} className="w-full bg-cyan-600 py-3 rounded-xl font-bold text-lg hover:bg-cyan-500 transition-colors disabled:opacity-50 mt-4">
-                    {isChecking ? 'Verifying...' : 'Verify & Share Key'}
-                </button>
-            </>
-          ) : (
-            <div className="bg-slate-800 p-4 rounded-lg">
-                <p className="text-sm text-slate-400 font-bold">Gemini Key Status:</p>
-                <p className={`text-lg font-bold mt-1 ${currentKey ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {currentKey ? 'Key Loaded from Cloud.' : 'Key Missing. Ask Admin to set it.'}
-                </p>
-                <p className="text-xs text-slate-500 mt-2">Only the first user who saves the key can change it.</p>
-            </div>
-          )}
+          {/* Goals for all users (Always Visible) */}
+          <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pt-4 pb-2 text-cyan-400">Personal Goals</h3>
+          <div className="space-y-3">
+              {Object.entries(localGoals).map(([k, v]) => (
+                <div key={k}>
+                  <label className="text-sm text-slate-400 uppercase">{k === 'calories' ? 'Calories' : `${k} (g)`}</label>
+                  <input type="number" value={v} onChange={e => setLocalGoals(prev => ({ ...prev, [k]: Number(e.target.value) }))} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-700 mt-2" />
+                </div>
+              ))}
+              <button onClick={handleSaveGoals} className="w-full py-3 bg-emerald-600 rounded-xl font-bold text-lg hover:bg-emerald-500 transition-colors mt-4">Save My Goals</button>
+          </div>
+          
+          <div className="mt-6 bg-slate-800 p-4 rounded-lg">
+              <p className="text-sm text-slate-400 font-bold">AI Status:</p>
+              <p className={`text-lg font-bold mt-1 ${currentKey ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {currentKey ? 'AI Key Loaded from Cloud.' : 'AI Key Missing.'}
+              </p>
+              <p className="text-xs text-slate-500 mt-2">The AI key is managed directly in the Firebase Console: app_config -> shared_keys.</p>
+          </div>
+
           
           <div className="text-center mt-4">
-            <button onClick={onClose} className="text-slate-500 hover:text-white text-sm">Close</button>
+            <button onClick={onClose} className="w-full py-2 bg-slate-700 rounded-xl font-bold hover:bg-slate-600 text-sm">Close Settings</button>
           </div>
         </div>
       </div>
@@ -277,7 +269,7 @@
           <div className="text-3xl font-black mb-2">{data.totals.cals} cal</div>
           <div className="text-sm text-slate-500">{data.totals.prot}g P • {data.totals.carb}g C</div>
         </div>
-        <ActivityRings {...data.totals} />
+        <ActivityRings cals={data.totals.cals} prot={data.totals.prot} carb={data.totals.carb} goals={data.goals || GOALS} />
 
         <div className="space-y-6">
           {dates.map(date => {
@@ -299,15 +291,18 @@
     );
   };
 
-  const GeminiFoodEntry = ({ isReady, userId, showToast }) => {
+  const GeminiFoodEntry = ({ isReady, userId, showToast, isConfigLoaded }) => {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null);
     const today = new Date().toISOString().split('T')[0];
+    
+    // Check key readiness
+    const isAiReady = isConfigLoaded && GEMINI_KEY;
 
     const analyze = async () => {
       if (!input.trim()) return;
-      if (!GEMINI_KEY) return showToast('Set API key in settings first', 'error');
+      if (!GEMINI_KEY) return showToast('AI Key Missing.', 'error');
       setLoading(true);
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_KEY}`, {
@@ -361,9 +356,11 @@
       <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 mb-8 border border-slate-700">
         <div className="flex gap-3 mb-4">
           <input className="flex-1 bg-slate-950/70 border border-slate-700 rounded-xl px-5 py-4 text-lg placeholder-slate-500 focus:border-emerald-500 transition" 
-                 placeholder="Large pepperoni pizza, 2 eggs + avocado toast..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && analyze()} />
-          <button onClick={analyze} disabled={loading || !GEMINI_KEY} className="bg-emerald-600 px-8 rounded-xl font-bold disabled:opacity-50 hover:bg-emerald-500 transition-colors">
-            {loading ? '...' : (!GEMINI_KEY ? 'Set Key' : 'AI')}
+                 placeholder={isConfigLoaded ? "What did you eat?" : "Loading config..."} 
+                 value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && analyze()}
+                 disabled={!isConfigLoaded} />
+          <button onClick={analyze} disabled={loading || !isAiReady} className="bg-emerald-600 px-8 rounded-xl font-bold disabled:opacity-50 hover:bg-emerald-500 transition-colors">
+            {loading ? '...' : (!isAiReady ? 'Wait...' : 'AI')}
           </button>
         </div>
         {result && (
@@ -382,7 +379,7 @@
     );
   };
 
-  const FoodTab = ({ data, isReady, userId, showToast }) => {
+  const FoodTab = ({ data, isReady, userId, showToast, isConfigLoaded }) => {
     const deleteFoodItem = async (docId) => {
         if (!isReady || !userId) return showToast('Database not ready.', 'error');
         try {
@@ -395,8 +392,8 @@
 
     return (
       <>
-        <ActivityRings {...data.totals} />
-        <GeminiFoodEntry isReady={isReady} userId={userId} showToast={showToast} />
+        <ActivityRings cals={data.totals.cals} prot={data.totals.prot} carb={data.totals.carb} goals={data.goals || GOALS} />
+        <GeminiFoodEntry isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={isConfigLoaded} />
         <div className="space-y-4">
           {!isReady && <div className="text-center text-slate-500 py-6">Waiting for Database connection...</div>}
           {data.food.map(item => (
@@ -507,7 +504,7 @@
       const timeMin = parseFloat(time);
       if (isNaN(dist) || isNaN(timeMin) || dist <= 0 || timeMin <= 0) return showToast('Invalid numbers', 'error');
 
-      const calories = type === 'run' ? Math.round(dist * 100) : type === 'cycle' ? Math.round(dist * 40) : Math.round(dist * 60);
+      const calories = type === 'run' ? Math.round(dist * 100) : type === 'cycle' ? Math.round(dist * 40) : type === 'run' ? Math.round(dist * 60) : 0; // Fixed: added 0 fallback
 
       const baseRef = DB.collection('users').doc(userId).collection('cardio_logs');
       try {
@@ -572,6 +569,8 @@
     const [isLoggedIn, setIsLoggedIn] = useState(false); // TRUE if permanent user
     const [connectionFailed, setConnectionFailed] = useState(false); 
     const [cloudConfig, setCloudConfig] = useState(null); // Stores shared settings (e.g., GEMINI_KEY)
+    const [goals, setGoals] = useState(DEFAULT_GOALS);
+    const [unit, setUnit] = useState('kg');
 
     const isReady = isDbInitialized && userId;
     const today = new Date().toISOString().split('T')[0];
@@ -586,32 +585,48 @@
         if (!DB) return;
         try {
             const doc = await DB.collection('app_config').doc('shared_keys').get();
+            let data = {};
             if (doc.exists) {
-                setCloudConfig(doc.data());
-                GEMINI_KEY = doc.data().geminiKey || '';
-                saveKey('hos_gemini_key', GEMINI_KEY);
-            } else {
-                // If doc doesn't exist, set initial empty state
-                setCloudConfig({}); 
+                data = doc.data();
             }
+            setCloudConfig(data); // Set cloudConfig to data (even if empty)
+            GEMINI_KEY = data.geminiKey || '';
+            
         } catch (e) {
             console.error("Error loading shared config:", e);
             showToast('Could not load shared app settings.', 'error');
         }
     };
     
-    // Save the new key/config to the cloud for others
+    const loadUserSettings = async (uid) => {
+        if (!DB) return;
+        try {
+            const doc = await DB.collection('users').doc(uid).collection('settings').doc('profile').get();
+            if (doc.exists) {
+                const data = doc.data();
+                if (data.goals) setGoals(data.goals);
+                if (data.unit) setUnit(data.unit);
+            }
+        } catch (e) {
+            console.error("Error loading user settings:", e);
+        }
+    };
+
     const saveSharedConfig = async (newKey) => {
         if (!DB || !AUTH.currentUser) return;
         try {
-            await DB.collection('app_config').doc('shared_keys').set({
+            const configToSave = {
+                // Ensure we merge with current cloudConfig in case other fields exist
+                ...(cloudConfig || {}), 
                 geminiKey: newKey,
-                adminUID: AUTH.currentUser.uid, // CRITICAL: Identify the admin
                 updatedBy: AUTH.currentUser.email || AUTH.currentUser.uid,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
+            };
+            
+            await DB.collection('app_config').doc('shared_keys').set(configToSave, { merge: true });
+            
+            await loadSharedConfig(); 
             showToast('Cloud settings updated!', 'success');
-            loadSharedConfig(); // Refresh local state
         } catch (e) {
             showToast('Failed to save shared settings. Check Security Rules.', 'error');
             console.error("Firestore Error:", e);
@@ -622,7 +637,8 @@
     // --- FIREBASE INITIALIZATION ---
     useEffect(() => {
         if (!dbConfig.projectId || typeof firebase === 'undefined') {
-            document.getElementById('loader-status').innerText = 'SETUP REQUIRED';
+            const statusElement = document.getElementById('loader-status');
+            if (statusElement) statusElement.innerText = 'SETUP REQUIRED';
             return;
         }
         
@@ -644,7 +660,8 @@
                         setIsDbInitialized(true);
                         setConnectionFailed(false);
                         document.getElementById('loader-status').innerText = 'LOGGED IN';
-                        loadSharedConfig(); // Load key only after successful login
+                        loadSharedConfig(); // CRITICAL: Load shared key first
+                        loadUserSettings(USER_ID); // Load personal goals
                     } else {
                         setUserId(null); 
                         setIsLoggedIn(false);
@@ -654,7 +671,8 @@
                 });
             } catch (e) {
                 console.error("Firebase Init Error:", e);
-                document.getElementById('loader-status').innerText = 'CONFIG ERROR';
+                const statusElement = document.getElementById('loader-status');
+                if (statusElement) statusElement.innerText = 'CONFIG ERROR';
                 setConnectionFailed(true);
             }
         };
@@ -691,7 +709,9 @@
         const loader = document.getElementById('loader');
         const root = document.getElementById('root');
         if (loader && root) {
-            document.getElementById('loader-status').innerText = statusText;
+            const statusElement = document.getElementById('loader-status');
+            if (statusElement) statusElement.innerText = statusText;
+
             loader.style.opacity = '0';
             root.style.opacity = '1';
             setTimeout(() => loader.remove(), 700);
@@ -723,8 +743,9 @@
         carb: a.carb + (b.carb || 0)
       }), { cals: 0, prot: 0, carb: 0 });
 
-      return { food, gym, cardio, totals };
-    }, [foodLog, gymLog, cardioLog, today]);
+      return { food, gym, cardio, totals, goals };
+    }, [foodLog, gymLog, cardioLog, today, goals]);
+
 
     const handleSettingsSave = (newKey, msg, type) => {
         // 1. Update LOCAL/GLOBAL state immediately
@@ -749,11 +770,8 @@
     // Determine if the app is usable or blocked
     const isAppUsable = isReady; 
     
-    // Admin check: True if the user is the one who originally set the key
-    const isAdmin = userId && cloudConfig?.adminUID === userId;
-    // Fallback Admin Check: If no key exists yet, the first logged-in user is the admin
-    const isFirstTimeAdmin = userId && !cloudConfig?.adminUID && cloudConfig !== null; // cloudConfig !== null ensures we've checked Firestore
-
+    // CRITICAL: The app must wait until it has confirmed the cloud config state (null vs {})
+    const isConfigLoaded = cloudConfig !== null; 
 
     return (
       <div className="max-w-md mx-auto min-h-screen pb-32 px-6 pt-8">
@@ -773,12 +791,19 @@
         {/* AUTH CHECK: Show login/signup if not permanently logged in */}
         {isDbInitialized && !isLoggedIn && (
             <div className="fixed inset-0 bg-black/80 z-40 flex items-center justify-center">
-                <AuthModal showToast={showToast} onAuthSuccess={() => {}} />
+                <AuthModal showToast={showToast} />
             </div>
         )}
         
         {/* SETTINGS MODAL */}
-        <SettingsModal isVisible={showSettings} onClose={() => setShowSettings(false)} onSave={handleSettingsSave} currentKey={GEMINI_KEY} isAdmin={isAdmin || isFirstTimeAdmin} />
+        <SettingsModal 
+            isVisible={showSettings} 
+            onClose={() => setShowSettings(false)} 
+            onSave={handleSettingsSave} 
+            currentKey={GEMINI_KEY} 
+            goals={goals} 
+            setGoals={setGoals} 
+        />
 
         {/* MAIN UI (BLOCKED IF NOT LOGGED IN) */}
         <div className={!isAppUsable ? 'opacity-20 pointer-events-none' : ''}>
@@ -798,7 +823,7 @@
             </div>
 
             {tab === 'summary' && <SummaryTab data={todaysData} allFood={foodLog} allGym={gymLog} allCardio={cardioLog} />}
-            {tab === 'food' && <FoodTab data={todaysData} isReady={isReady} userId={userId} showToast={showToast} />}
+            {tab === 'food' && <FoodTab data={todaysData} isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={isConfigLoaded} />}
             {tab === 'gym' && <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} />}
             {tab === 'cardio' && <CardioTab isReady={isReady} userId={userId} showToast={showToast} />}
         </div>
