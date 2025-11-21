@@ -131,6 +131,23 @@
       return <circle cx="128" cy="128" r={r} stroke={color} strokeWidth="14" fill="none" strokeDasharray={circum} strokeDashoffset={circum - dash} strokeLinecap="round" transform="rotate(-90 128 128)" className="transition-all duration-1000" style={{ filter: `drop-shadow(0 0 8px ${color})` }} />;
     };
 
+    const NutrientLegend = ({ cals, prot, carb, fat, goals }) => (
+      <div className="grid grid-cols-4 gap-2 mt-6 w-full max-w-md text-center">
+        {[
+          { val: cals, goal: goals.calories, label: 'Cals', color: 'text-emerald-400' },
+          { val: prot, goal: goals.protein, label: 'Prot', color: 'text-blue-400' },
+          { val: carb, goal: goals.carbs, label: 'Carb', color: 'text-amber-400' },
+          { val: fat, goal: goals.fat || 80, label: 'Fat', color: 'text-rose-400' }
+        ].map((m, i) => (
+          <div key={i} className="flex flex-col items-center">
+            <div className={`${m.color} font-bold text-sm whitespace-nowrap`}>{m.val || 0} <span className="text-slate-600">/ {m.goal}</span></div>
+            <div className="text-xs font-black my-0.5">{Math.round(((m.val || 0) / m.goal) * 100)}%</div>
+            <div className="text-[10px] text-slate-500 uppercase tracking-wider">{m.label}</div>
+          </div>
+        ))}
+      </div>
+    );
+
     const ActivityRings = ({ cals, prot, carb, fat, goals }) => {
       const pct = (v, g) => Math.min(100, (v / g) * 100);
 
@@ -153,12 +170,7 @@
           </div>
 
           {/* Legend */}
-          <div className="grid grid-cols-4 gap-4 mt-6 w-full max-w-sm text-center">
-            <div><div className="text-emerald-400 font-bold text-xl">{cals || 0}</div><div className="text-[10px] text-slate-500 uppercase tracking-wider">Cals</div></div>
-            <div><div className="text-blue-400 font-bold text-xl">{prot || 0}g</div><div className="text-[10px] text-slate-500 uppercase tracking-wider">Prot</div></div>
-            <div><div className="text-amber-400 font-bold text-xl">{carb || 0}g</div><div className="text-[10px] text-slate-500 uppercase tracking-wider">Carb</div></div>
-            <div><div className="text-rose-400 font-bold text-xl">{fat || 0}g</div><div className="text-[10px] text-slate-500 uppercase tracking-wider">Fat</div></div>
-          </div>
+          <NutrientLegend cals={cals} prot={prot} carb={carb} fat={fat} goals={goals} />
         </div>
       );
     };
@@ -324,8 +336,14 @@
               return (
                 <div key={date} className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 border border-slate-700">
                   <div className="text-lg font-bold mb-4">{new Date(date).toLocaleDateString('en', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
-                  {dayFood.length > 0 && <div className="mb-4"><div className="text-xs text-slate-500 uppercase mb-2">Food</div>{dayFood.map(f => <div key={f.id} className="text-sm">• {f.name} ({f.cals} cal)</div>)}</div>}
-                  {dayGym.length > 0 && <div className="mb-4"><div className="text-xs text-slate-500 uppercase mb-2">Gym</div>{dayGym.map(g => <div key={g.id} className="text-sm">• {g.workoutName}</div>)}</div>}
+                  {dayGym.length > 0 && <div className="mb-4"><div className="text-xs text-slate-500 uppercase mb-2">Gym</div>{dayGym.map(g => (
+                    <div key={g.id} className="text-sm mb-2">
+                      <div className="font-bold text-cyan-400">• {g.workoutName}</div>
+                      <div className="text-xs text-slate-400 ml-3">
+                        {g.exercises.map(e => e.exercise).join(', ')}
+                      </div>
+                    </div>
+                  ))}</div>}
                   {dayCardio.length > 0 && <div><div className="text-xs text-slate-500 uppercase mb-2">Cardio</div>{dayCardio.map(c => <div key={c.id} className="text-sm">• {c.type} – {c.distance}km in {c.time} min</div>)}</div>}
                 </div>
               );
@@ -436,7 +454,9 @@
 
       return (
         <>
-          <ActivityRings cals={data.totals.cals} prot={data.totals.prot} carb={data.totals.carb} fat={data.totals.fat} goals={data.goals || GOALS} />
+          <div className="mb-8">
+            <NutrientLegend cals={data.totals.cals} prot={data.totals.prot} carb={data.totals.carb} fat={data.totals.fat} goals={data.goals || GOALS} />
+          </div>
           <GeminiFoodEntry isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={isConfigLoaded} />
           <div className="space-y-4">
             {!isReady && <div className="text-center text-slate-500 py-6">Waiting for Database connection...</div>}
