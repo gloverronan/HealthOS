@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -13,7 +14,8 @@
   <script>
     tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] } } } }
   </script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet">
 
   <!-- React 18 (CRITICAL FIX: CORE FIRST, DOM SECOND) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -24,211 +26,243 @@
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-  
+
   <style>
-    body { background: #020617; color: white; overscroll-behavior: none; }
-    #loader { position: fixed; inset: 0; background: #020617; z-index: 9999; display: flex; align-items: center; justify-content: center; transition: opacity 0.7s; }
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    body {
+      background: #020617;
+      color: white;
+      overscroll-behavior: none;
+    }
+
+    #loader {
+      position: fixed;
+      inset: 0;
+      background: #020617;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.7s;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
     .input-box {
-        background-color: #1e293b; border: 1px solid #334155; border-radius: 12px;
-        text-align: center; color: white; font-weight: 600; font-size: 16px;
-        width: 100%; height: 44px; outline: none; transition: all 0.2s;
+      background-color: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      text-align: center;
+      color: white;
+      font-weight: 600;
+      font-size: 16px;
+      width: 100%;
+      height: 44px;
+      outline: none;
+      transition: all 0.2s;
     }
   </style>
 </head>
+
 <body class="min-h-screen">
 
-<div id="loader">
-  <div class="text-center">
-    <div class="w-16 h-16 border-4 border-slate-800 border-t-cyan-500 rounded-full animate-spin mb-6"></div>
-    <div class="text-3xl font-black tracking-tighter">Health OS</div>
-    <div class="text-sm text-slate-500 mt-2 tracking-widest" id="loader-status">CONNECTING</div>
+  <div id="loader">
+    <div class="text-center">
+      <div class="w-16 h-16 border-4 border-slate-800 border-t-cyan-500 rounded-full animate-spin mb-6"></div>
+      <div class="text-3xl font-black tracking-tighter">Health OS</div>
+      <div class="text-sm text-slate-500 mt-2 tracking-widest" id="loader-status">CONNECTING</div>
+    </div>
   </div>
-</div>
 
-<div id="root" class="opacity-0 transition-opacity duration-700"></div>
+  <div id="root" class="opacity-0 transition-opacity duration-700"></div>
 
-<script type="text/babel">
-  const { useState, useEffect, useMemo } = React;
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
 
-  // --- LOCAL STORAGE HELPERS ---
-  const loadItem = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) || def; } catch { return def; } };
-  const saveItem = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
-  const loadKey = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
-  const saveKey = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+    // --- LOCAL STORAGE HELPERS ---
+    const loadItem = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) || def; } catch { return def; } };
+    const saveItem = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { } };
+    const loadKey = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
+    const saveKey = (k, v) => { try { localStorage.setItem(k, v); } catch { } };
 
-  // --- 1. HARDCODED CONFIG ---
-  const FIREBASE_CONFIG = {
-    apiKey: "AIzaSyBUiU8DmIgQH843AqqM4oiK22i4p2UJdp0",
-    authDomain: "healthos-3d23f.firebaseapp.com",
-    projectId: "healthos-3d23f",
-    appId: "1:1071494735916:web:65d641926c7511ee5c4989",
-  };
-  
-  // --- END HARDCODED CONFIG ---
-
-  const DEFAULT_GOALS = { calories: 2350, protein: 180, carbs: 250 }; 
-  const GOALS = DEFAULT_GOALS; 
-  let GEMINI_KEY = ''; // Cloud managed
-
-  const DEFAULT_WORKOUTS = [
-    { id: "push", name: "Push", color: "#ec4899", exercises: ["Bench Press", "Overhead Press", "Tricep Extensions"] },
-    { id: "legs", name: "Legs", color: "#3b82f6", exercises: ["Squat", "Romanian Deadlift", "Calf Raises"] },
-    { id: "pull", name: "Pull", color: "#10b981", exercises: ["Pull-ups", "Barbell Row", "Bicep Curls"] }
-  ];
-  
-  // --- FIREBASE GLOBALS ---
-  let DB = null;
-  let AUTH = null;
-  let USER_ID = null;
-
-  // --- COMPONENT: ICONS ---
-  const Icon = ({ name, size=24, className, onClick }) => {
-      const i = { Trash: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />, Settings: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-            };
-            return <svg className={`w-${size/4} h-${size/4} ${className}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" onClick={onClick}>{i[name]}</svg>;
-        };
-
-  // --- COMPONENT: ACTIVITY RINGS (HELPER) ---
-  const ActivityRings = ({ cals, prot, carb, goals }) => {
-    const pct = (v, g) => Math.min(100, (v / g) * 100);
-    const Ring = ({ r, progress, color }) => {
-      const circum = 2 * Math.PI * r;
-      const dash = (progress / 100) * circum;
-      return <circle cx="128" cy="128" r={r} stroke={color} strokeWidth="14" fill="none" strokeDasharray={circum} strokeDashoffset={circum - dash} strokeLinecap="round" className="-rotate-90 transition-all duration-1000" style={{ filter: `drop-shadow(0 0 8px ${color})` }} />;
+    // --- 1. HARDCODED CONFIG ---
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyBUiU8DmIgQH843AqqM4oiK22i4p2UJdp0",
+      authDomain: "healthos-3d23f.firebaseapp.com",
+      projectId: "healthos-3d23f",
+      appId: "1:1071494735916:web:65d641926c7511ee5c4989",
     };
 
-    return (
-      <div className="relative w-64 h-64 mx-auto mb-8">
-        <svg viewBox="0 0 256 256">
-          <circle cx="128" cy="128" r="110" stroke="#1e293b" strokeWidth="14" fill="none" opacity="0.3"/>
-          <circle cx="128" cy="128" r="90" stroke="#1e293b" strokeWidth="14" fill="none" opacity="0.3"/>
-          <circle cx="128" cy="128" r="70" stroke="#1e293b" strokeWidth="14" fill="none" opacity="0.3"/>
-          <Ring r={110} progress={pct(cals, goals.calories)} color="#10b981" />
-          <Ring r={90} progress={pct(prot, goals.protein)} color="#3b82f6" />
-          <Ring r={70} progress={pct(carb, goals.carbs)} color="#f59e0b" />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center text-center">
-          <div>
-            <div className="text-5xl font-black">{cals || 0}</div>
-            <div className="text-xs text-slate-500 uppercase tracking-widest">Calories</div>
+    // --- END HARDCODED CONFIG ---
+
+    const DEFAULT_GOALS = { calories: 2350, protein: 180, carbs: 250 };
+    const GOALS = DEFAULT_GOALS;
+    let GEMINI_KEY = ''; // Cloud managed
+
+    const DEFAULT_WORKOUTS = [
+      { id: "push", name: "Push", color: "#ec4899", exercises: ["Bench Press", "Overhead Press", "Tricep Extensions"] },
+      { id: "legs", name: "Legs", color: "#3b82f6", exercises: ["Squat", "Romanian Deadlift", "Calf Raises"] },
+      { id: "pull", name: "Pull", color: "#10b981", exercises: ["Pull-ups", "Barbell Row", "Bicep Curls"] }
+    ];
+
+    // --- FIREBASE GLOBALS ---
+    let DB = null;
+    let AUTH = null;
+    let USER_ID = null;
+
+    // --- COMPONENT: ICONS ---
+    const Icon = ({ name, size = 24, className, onClick }) => {
+      const i = {
+        Trash: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />, Settings: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      };
+      return <svg className={`w-${size / 4} h-${size / 4} ${className}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" onClick={onClick}>{i[name]}</svg>;
+    };
+
+    // --- COMPONENT: ACTIVITY RINGS (HELPER) ---
+    const ActivityRings = ({ cals, prot, carb, goals }) => {
+      const pct = (v, g) => Math.min(100, (v / g) * 100);
+      const Ring = ({ r, progress, color }) => {
+        const circum = 2 * Math.PI * r;
+        const dash = (progress / 100) * circum;
+        return <circle cx="128" cy="128" r={r} stroke={color} strokeWidth="14" fill="none" strokeDasharray={circum} strokeDashoffset={circum - dash} strokeLinecap="round" className="-rotate-90 transition-all duration-1000" style={{ filter: `drop-shadow(0 0 8px ${color})` }} />;
+      };
+
+      return (
+        <div className="relative w-64 h-64 mx-auto mb-8">
+          <svg viewBox="0 0 256 256">
+            <circle cx="128" cy="128" r="110" stroke="#1e293b" strokeWidth="14" fill="none" opacity="0.3" />
+            <circle cx="128" cy="128" r="90" stroke="#1e293b" strokeWidth="14" fill="none" opacity="0.3" />
+            <circle cx="128" cy="128" r="70" stroke="#1e293b" strokeWidth="14" fill="none" opacity="0.3" />
+            <Ring r={110} progress={pct(cals, goals.calories)} color="#10b981" />
+            <Ring r={90} progress={pct(prot, goals.protein)} color="#3b82f6" />
+            <Ring r={70} progress={pct(carb, goals.carbs)} color="#f59e0b" />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center text-center">
+            <div>
+              <div className="text-5xl font-black">{cals || 0}</div>
+              <div className="text-xs text-slate-500 uppercase tracking-widest">Calories</div>
+            </div>
           </div>
         </div>
-      </div>
-    );
-  };
-
-  // --- AUTH MODAL ---
-  const AuthModal = ({ showToast }) => {
-    const [mode, setMode] = useState('login'); 
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-
-    const handleSubmit = async () => {
-      if (!email || !password) return setError('Email and password required.');
-      setIsLoading(true);
-      setError('');
-      
-      try {
-        if (mode === 'signup') {
-          await AUTH.createUserWithEmailAndPassword(email, password);
-        } else {
-          await AUTH.signInWithEmailAndPassword(email, password);
-        }
-        showToast('Logged in successfully!', 'success');
-
-      } catch (e) {
-        let msg = "Authentication failed. Check credentials and ensure Email/Password is enabled in Firebase.";
-        if (e.code) {
-          msg = e.message.replace('Firebase:', '').trim();
-        }
-        setError(msg);
-      } finally {
-        setIsLoading(false);
-      }
+      );
     };
-    
-    const handleGoogleSignIn = async () => {
+
+    // --- AUTH MODAL ---
+    const AuthModal = ({ showToast }) => {
+      const [mode, setMode] = useState('login');
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+      const [isLoading, setIsLoading] = useState(false);
+
+      const handleSubmit = async () => {
+        if (!email || !password) return setError('Email and password required.');
+        setIsLoading(true);
+        setError('');
+
+        try {
+          if (mode === 'signup') {
+            await AUTH.createUserWithEmailAndPassword(email, password);
+          } else {
+            await AUTH.signInWithEmailAndPassword(email, password);
+          }
+          showToast('Logged in successfully!', 'success');
+
+        } catch (e) {
+          let msg = "Authentication failed. Check credentials and ensure Email/Password is enabled in Firebase.";
+          if (e.code) {
+            msg = e.message.replace('Firebase:', '').trim();
+          }
+          setError(msg);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const handleGoogleSignIn = async () => {
         setIsLoading(true);
         setError('');
         try {
-            const provider = new firebase.auth.GoogleAuthProvider();
-            await AUTH.signInWithPopup(provider);
+          const provider = new firebase.auth.GoogleAuthProvider();
+          await AUTH.signInWithPopup(provider);
         } catch (e) {
-            if (e.code !== 'auth/popup-closed-by-user') {
-                setError('Google sign-in failed. Ensure Google provider is enabled in Firebase.');
-            }
+          if (e.code !== 'auth/popup-closed-by-user') {
+            setError('Google sign-in failed. Ensure Google provider is enabled in Firebase.');
+          }
         } finally {
-            setIsLoading(false);
+          setIsLoading(false);
         }
-    };
+      };
 
-    return (
-      <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md">
-        <div className="bg-slate-900/90 border border-slate-700 p-6 rounded-xl w-full max-w-sm shadow-2xl">
-          <h3 className="text-3xl font-black mb-6 text-center">{mode === 'login' ? 'Log In' : 'Create Account'}</h3>
-          
-          {error && <div className="bg-red-600/20 text-red-400 p-3 rounded-lg mb-4 text-sm">{error}</div>}
+      return (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-slate-900/90 border border-slate-700 p-6 rounded-xl w-full max-w-sm shadow-2xl">
+            <h3 className="text-3xl font-black mb-6 text-center">{mode === 'login' ? 'Log In' : 'Create Account'}</h3>
 
-          <button onClick={handleGoogleSignIn} disabled={isLoading}
-                  className="w-full py-4 rounded-xl font-bold mb-3 bg-slate-800 text-white hover:bg-slate-700 transition-colors disabled:opacity-50">
-            {isLoading ? '...' : 'Sign in with Google'}
-          </button>
-          
-          <div className="text-center text-xs text-slate-600 mb-3 uppercase tracking-widest">or</div>
+            {error && <div className="bg-red-600/20 text-red-400 p-3 rounded-lg mb-4 text-sm">{error}</div>}
 
-          <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} 
-                 className="w-full bg-slate-800 p-4 rounded-xl mb-3 border border-slate-700 outline-none" />
-          <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} 
-                 className="w-full bg-slate-800 p-4 rounded-xl mb-6 border border-slate-700 outline-none" />
-          
-          <button onClick={handleSubmit} disabled={isLoading}
-                  className={`w-full py-4 rounded-xl font-bold text-lg ${mode === 'login' ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-emerald-600 hover:bg-emerald-500'} disabled:opacity-50 transition-colors`}>
-            {isLoading ? 'Processing...' : mode === 'login' ? 'Log In' : 'Create Account'}
-          </button>
+            <button onClick={handleGoogleSignIn} disabled={isLoading}
+              className="w-full py-4 rounded-xl font-bold mb-3 bg-slate-800 text-white hover:bg-slate-700 transition-colors disabled:opacity-50">
+              {isLoading ? '...' : 'Sign in with Google'}
+            </button>
 
-          <button onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
-                  className="w-full mt-4 text-slate-400 text-sm hover:text-white transition-colors">
-            {mode === 'login' ? "Don't have an account? Sign Up" : "Already have an account? Log In"}
-          </button>
+            <div className="text-center text-xs text-slate-600 mb-3 uppercase tracking-widest">or</div>
+
+            <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
+              className="w-full bg-slate-800 p-4 rounded-xl mb-3 border border-slate-700 outline-none" />
+            <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)}
+              className="w-full bg-slate-800 p-4 rounded-xl mb-6 border border-slate-700 outline-none" />
+
+            <button onClick={handleSubmit} disabled={isLoading}
+              className={`w-full py-4 rounded-xl font-bold text-lg ${mode === 'login' ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-emerald-600 hover:bg-emerald-500'} disabled:opacity-50 transition-colors`}>
+              {isLoading ? 'Processing...' : mode === 'login' ? 'Log In' : 'Create Account'}
+            </button>
+
+            <button onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
+              className="w-full mt-4 text-slate-400 text-sm hover:text-white transition-colors">
+              {mode === 'login' ? "Don't have an account? Sign Up" : "Already have an account? Log In"}
+            </button>
+          </div>
         </div>
-      </div>
-    );
-  };
-
-  // --- SETTINGS MODAL ---
-  const SettingsModal = ({ isVisible, onClose, onSave, currentKey, goals, setGoals }) => {
-    const [localGoals, setLocalGoals] = useState(goals);
-    
-    // Update local state when prop changes (after cloud load)
-    useEffect(() => {
-        setLocalGoals(goals);
-    }, [goals]);
-
-    if (!isVisible) return null;
-
-    const handleSaveGoals = async () => {
-        try {
-            await DB.collection('users').doc(AUTH.currentUser.uid).collection('settings').doc('profile').set({ goals: localGoals }, { merge: true });
-            setGoals(localGoals); // Update state in App
-            onClose();
-            showToast('Personal goals saved!', 'success');
-        } catch {
-            showToast('Failed to save goals to cloud.', 'error');
-        }
+      );
     };
 
-    return (
-      <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in" onClick={onClose}>
-        <div className="bg-slate-900/90 border border-slate-700 p-6 rounded-xl w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
-          <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pb-2">Application Settings</h3>
-          
-          {/* Goals for all users (Always Visible) */}
-          <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pt-4 pb-2 text-cyan-400">Personal Goals</h3>
-          <div className="space-y-3">
+    // --- SETTINGS MODAL ---
+    const SettingsModal = ({ isVisible, onClose, onSave, currentKey, goals, setGoals }) => {
+      const [localGoals, setLocalGoals] = useState(goals);
+
+      // Update local state when prop changes (after cloud load)
+      useEffect(() => {
+        setLocalGoals(goals);
+      }, [goals]);
+
+      if (!isVisible) return null;
+
+      const handleSaveGoals = async () => {
+        try {
+          await DB.collection('users').doc(AUTH.currentUser.uid).collection('settings').doc('profile').set({ goals: localGoals }, { merge: true });
+          setGoals(localGoals); // Update state in App
+          onClose();
+          showToast('Personal goals saved!', 'success');
+        } catch {
+          showToast('Failed to save goals to cloud.', 'error');
+        }
+      };
+
+      return (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in" onClick={onClose}>
+          <div className="bg-slate-900/90 border border-slate-700 p-6 rounded-xl w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pb-2">Application Settings</h3>
+
+            {/* Goals for all users (Always Visible) */}
+            <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pt-4 pb-2 text-cyan-400">Personal Goals</h3>
+            <div className="space-y-3">
               {Object.entries(localGoals).map(([k, v]) => (
                 <div key={k}>
                   <label className="text-sm text-slate-400 uppercase">{k === 'calories' ? 'Calories' : `${k} (g)`}</label>
@@ -236,588 +270,590 @@
                 </div>
               ))}
               <button onClick={handleSaveGoals} className="w-full py-3 bg-emerald-600 rounded-xl font-bold text-lg hover:bg-emerald-500 transition-colors mt-4">Save My Goals</button>
-          </div>
-          
-          <div className="mt-6 bg-slate-800 p-4 rounded-lg">
+            </div>
+
+            <div className="mt-6 bg-slate-800 p-4 rounded-lg">
               <p className="text-sm text-slate-400 font-bold">AI Status:</p>
               <p className={`text-lg font-bold mt-1 ${currentKey ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {currentKey ? 'AI Key Loaded from Cloud.' : 'AI Key Missing.'}
+                {currentKey ? 'AI Key Loaded from Cloud.' : 'AI Key Missing.'}
               </p>
-              <p className="text-xs text-slate-500 mt-2">The AI key is managed directly in the Firebase Console: app_config -> shared_keys.</p>
-          </div>
+              <p className="text-xs text-slate-500 mt-2">The AI key is managed directly in the Firebase Console: app_config/shared_keys.</p>
+            </div>
 
-          
-          <div className="text-center mt-4">
-            <button onClick={onClose} className="w-full py-2 bg-slate-700 rounded-xl font-bold hover:bg-slate-600 text-sm">Close Settings</button>
+
+            <div className="text-center mt-4">
+              <button onClick={onClose} className="w-full py-2 bg-slate-700 rounded-xl font-bold hover:bg-slate-600 text-sm">Close Settings</button>
+            </div>
           </div>
         </div>
-      </div>
-    );
-  };
-  
-  // --- TAB COMPONENTS ---
+      );
+    };
 
-  const SummaryTab = ({ data, allFood, allGym, allCardio }) => {
-    const dates = useMemo(() => {
+    // --- TAB COMPONENTS ---
+
+    const SummaryTab = ({ data, allFood, allGym, allCardio }) => {
+      const dates = useMemo(() => {
         const uniqueDates = [...new Set([...allFood.map(f => f.date), ...allGym.map(g => g.date), ...allCardio.map(c => c.date)])];
         return uniqueDates.filter(d => d).sort().reverse();
-    }, [allFood, allGym, allCardio]);
+      }, [allFood, allGym, allCardio]);
 
-    return (
-      <div className="space-y-8">
-        <div className="text-center">
-          <div className="text-3xl font-black mb-2">{data.totals.cals} cal</div>
-          <div className="text-sm text-slate-500">{data.totals.prot}g P • {data.totals.carb}g C</div>
+      return (
+        <div className="space-y-8">
+          <div className="text-center">
+            <div className="text-3xl font-black mb-2">{data.totals.cals} cal</div>
+            <div className="text-sm text-slate-500">{data.totals.prot}g P • {data.totals.carb}g C</div>
+          </div>
+          <ActivityRings cals={data.totals.cals} prot={data.totals.prot} carb={data.totals.carb} goals={data.goals || GOALS} />
+
+          <div className="space-y-6">
+            {dates.map(date => {
+              const dayFood = allFood.filter(f => f.date === date);
+              const dayGym = allGym.filter(g => g.date === date);
+              const dayCardio = allCardio.filter(c => c.date === date);
+
+              return (
+                <div key={date} className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 border border-slate-700">
+                  <div className="text-lg font-bold mb-4">{new Date(date).toLocaleDateString('en', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
+                  {dayFood.length > 0 && <div className="mb-4"><div className="text-xs text-slate-500 uppercase mb-2">Food</div>{dayFood.map(f => <div key={f.id} className="text-sm">• {f.name} ({f.cals} cal)</div>)}</div>}
+                  {dayGym.length > 0 && <div className="mb-4"><div className="text-xs text-slate-500 uppercase mb-2">Gym</div>{dayGym.map(g => <div key={g.id} className="text-sm">• {g.workoutName}</div>)}</div>}
+                  {dayCardio.length > 0 && <div><div className="text-xs text-slate-500 uppercase mb-2">Cardio</div>{dayCardio.map(c => <div key={c.id} className="text-sm">• {c.type} – {c.distance}km in {c.time} min</div>)}</div>}
+                </div>
+              );
+            })}
+          </div>
         </div>
-        <ActivityRings cals={data.totals.cals} prot={data.totals.prot} carb={data.totals.carb} goals={data.goals || GOALS} />
-
-        <div className="space-y-6">
-          {dates.map(date => {
-            const dayFood = allFood.filter(f => f.date === date);
-            const dayGym = allGym.filter(g => g.date === date);
-            const dayCardio = allCardio.filter(c => c.date === date);
-
-            return (
-              <div key={date} className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 border border-slate-700">
-                <div className="text-lg font-bold mb-4">{new Date(date).toLocaleDateString('en', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
-                {dayFood.length > 0 && <div className="mb-4"><div className="text-xs text-slate-500 uppercase mb-2">Food</div>{dayFood.map(f => <div key={f.id} className="text-sm">• {f.name} ({f.cals} cal)</div>)}</div>}
-                {dayGym.length > 0 && <div className="mb-4"><div className="text-xs text-slate-500 uppercase mb-2">Gym</div>{dayGym.map(g => <div key={g.id} className="text-sm">• {g.workoutName}</div>)}</div>}
-                {dayCardio.length > 0 && <div><div className="text-xs text-slate-500 uppercase mb-2">Cardio</div>{dayCardio.map(c => <div key={c.id} className="text-sm">• {c.type} – {c.distance}km in {c.time} min</div>)}</div>}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  const GeminiFoodEntry = ({ isReady, userId, showToast, isConfigLoaded }) => {
-    const [input, setInput] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [result, setResult] = useState(null);
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Check key readiness
-    const isAiReady = isConfigLoaded && GEMINI_KEY;
-
-    const analyze = async () => {
-      if (!input.trim()) return;
-      if (!GEMINI_KEY) return showToast('AI Key Missing.', 'error');
-      setLoading(true);
-      try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_KEY}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `Return ONLY valid JSON (no markdown): {"name":"string","cals":number,"prot":number,"carb":number,"fat":number}. Food: ${input}` }] }]
-          })
-        });
-        
-        const data = await res.json();
-        const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        
-        if (!responseText) throw new Error('Empty response from AI.');
-        
-        const jsonString = responseText.trim().replace(/```json|```/g, '');
-        const json = JSON.parse(jsonString);
-        setResult(json);
-
-      } catch (e) {
-        showToast('AI failed. Check key/input.', 'error');
-        console.error("Gemini Failure:", e);
-      }
-      setLoading(false);
+      );
     };
 
-    const add = async () => {
+    const GeminiFoodEntry = ({ isReady, userId, showToast, isConfigLoaded }) => {
+      const [input, setInput] = useState('');
+      const [loading, setLoading] = useState(false);
+      const [result, setResult] = useState(null);
+      const today = new Date().toISOString().split('T')[0];
+
+      // Check key readiness
+      const isAiReady = isConfigLoaded && GEMINI_KEY;
+
+      const analyze = async () => {
+        if (!input.trim()) return;
+        if (!GEMINI_KEY) return showToast('AI Key Missing.', 'error');
+        setLoading(true);
+        try {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `Return ONLY valid JSON (no markdown): {"name":"string","cals":number,"prot":number,"carb":number,"fat":number}. Food: ${input}` }] }]
+            })
+          });
+
+          const data = await res.json();
+          const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+          if (!responseText) throw new Error('Empty response from AI.');
+
+          const jsonString = responseText.trim().replace(/```json|```/g, '');
+          const json = JSON.parse(jsonString);
+          setResult(json);
+
+        } catch (e) {
+          showToast('AI failed. Check key/input.', 'error');
+          console.error("Gemini Failure:", e);
+        }
+        setLoading(false);
+      };
+
+      const add = async () => {
         if (!result || !isReady || !userId) return showToast('Database not ready.', 'error');
         const baseRef = DB.collection('users').doc(userId).collection('food_logs');
-        
+
         try {
-            await baseRef.add({
-                date: today,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                name: result.name,
-                cals: Number(result.cals) || 0,
-                prot: Number(result.prot) || 0,
-                carb: Number(result.carb) || 0,
-                fat: Number(result.fat) || 0
-            });
-            setInput('');
-            setResult(null);
-            showToast('Food logged!', 'success');
+          await baseRef.add({
+            date: today,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            name: result.name,
+            cals: Number(result.cals) || 0,
+            prot: Number(result.prot) || 0,
+            carb: Number(result.carb) || 0,
+            fat: Number(result.fat) || 0
+          });
+          setInput('');
+          setResult(null);
+          showToast('Food logged!', 'success');
         } catch (e) {
-            showToast('Logging failed. Database error.', 'error');
-            console.error("Firestore Error:", e);
+          showToast('Logging failed. Database error.', 'error');
+          console.error("Firestore Error:", e);
         }
+      };
+
+      return (
+        <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 mb-8 border border-slate-700">
+          <div className="flex gap-3 mb-4">
+            <input className="flex-1 bg-slate-950/70 border border-slate-700 rounded-xl px-5 py-4 text-lg placeholder-slate-500 focus:border-emerald-500 transition"
+              placeholder={isConfigLoaded ? "What did you eat?" : "Loading config..."}
+              value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && analyze()}
+              disabled={!isConfigLoaded} />
+            <button onClick={analyze} disabled={loading || !isAiReady} className="bg-emerald-600 px-8 rounded-xl font-bold disabled:opacity-50 hover:bg-emerald-500 transition-colors">
+              {loading ? '...' : (!isAiReady ? 'Wait...' : 'AI')}
+            </button>
+          </div>
+          {result && (
+            <div className="space-y-4 animate-in fade-in">
+              <input className="w-full bg-transparent text-xl font-bold outline-none border-b border-slate-600" value={result.name} onChange={e => setResult({ ...result, name: e.target.value })} />
+              <div className="grid grid-cols-4 gap-4">
+                {['cals', 'prot', 'carb', 'fat'].map(k => (
+                  <input key={k} type="number" className="bg-slate-950/70 rounded-lg p-3 text-center text-xl font-bold"
+                    value={result[k]} onChange={e => setResult({ ...result, [k]: e.target.value })} placeholder={k} />
+                ))}
+              </div>
+              <button onClick={add} className="w-full bg-emerald-600 py-4 rounded-xl font-bold text-lg">Add to Today</button>
+            </div>
+          )}
+        </div>
+      );
     };
 
-    return (
-      <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 mb-8 border border-slate-700">
-        <div className="flex gap-3 mb-4">
-          <input className="flex-1 bg-slate-950/70 border border-slate-700 rounded-xl px-5 py-4 text-lg placeholder-slate-500 focus:border-emerald-500 transition" 
-                 placeholder={isConfigLoaded ? "What did you eat?" : "Loading config..."} 
-                 value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && analyze()}
-                 disabled={!isConfigLoaded} />
-          <button onClick={analyze} disabled={loading || !isAiReady} className="bg-emerald-600 px-8 rounded-xl font-bold disabled:opacity-50 hover:bg-emerald-500 transition-colors">
-            {loading ? '...' : (!isAiReady ? 'Wait...' : 'AI')}
-          </button>
-        </div>
-        {result && (
-          <div className="space-y-4 animate-in fade-in">
-            <input className="w-full bg-transparent text-xl font-bold outline-none border-b border-slate-600" value={result.name} onChange={e => setResult({...result, name: e.target.value})} />
-            <div className="grid grid-cols-4 gap-4">
-              {['cals','prot','carb','fat'].map(k => (
-                <input key={k} type="number" className="bg-slate-950/70 rounded-lg p-3 text-center text-xl font-bold" 
-                       value={result[k]} onChange={e => setResult({...result, [k]: e.target.value})} placeholder={k} />
-              ))}
-            </div>
-            <button onClick={add} className="w-full bg-emerald-600 py-4 rounded-xl font-bold text-lg">Add to Today</button>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const FoodTab = ({ data, isReady, userId, showToast, isConfigLoaded }) => {
-    const deleteFoodItem = async (docId) => {
+    const FoodTab = ({ data, isReady, userId, showToast, isConfigLoaded }) => {
+      const deleteFoodItem = async (docId) => {
         if (!isReady || !userId) return showToast('Database not ready.', 'error');
         try {
-            await DB.collection('users').doc(userId).collection('food_logs').doc(docId).delete();
-            showToast('Item deleted!', 'success');
+          await DB.collection('users').doc(userId).collection('food_logs').doc(docId).delete();
+          showToast('Item deleted!', 'success');
         } catch (e) {
-            showToast('Deletion failed. Check Security Rules.', 'error');
+          showToast('Deletion failed. Check Security Rules.', 'error');
         }
+      };
+
+      return (
+        <>
+          <ActivityRings cals={data.totals.cals} prot={data.totals.prot} carb={data.totals.carb} goals={data.goals || GOALS} />
+          <GeminiFoodEntry isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={isConfigLoaded} />
+          <div className="space-y-4">
+            {!isReady && <div className="text-center text-slate-500 py-6">Waiting for Database connection...</div>}
+            {data.food.map(item => (
+              <div key={item.id} className="bg-slate-900/80 backdrop-blur-xl rounded-xl p-5 flex justify-between items-center border border-slate-700">
+                <div>
+                  <div className="font-bold">{item.name}</div>
+                  <div className="text-sm text-slate-500">{item.prot}g P • {item.carb}g C • {item.fat}g F</div>
+                </div>
+                <div className="text-right flex items-center gap-4">
+                  <div className="text-2xl font-black text-emerald-400">{item.cals}</div>
+                  <button onClick={() => deleteFoodItem(item.id)} className="text-red-500 text-lg">×</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      );
     };
 
-    return (
-      <>
-        <ActivityRings cals={data.totals.cals} prot={data.totals.prot} carb={data.totals.carb} goals={data.goals || GOALS} />
-        <GeminiFoodEntry isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={isConfigLoaded} />
-        <div className="space-y-4">
-          {!isReady && <div className="text-center text-slate-500 py-6">Waiting for Database connection...</div>}
-          {data.food.map(item => (
-            <div key={item.id} className="bg-slate-900/80 backdrop-blur-xl rounded-xl p-5 flex justify-between items-center border border-slate-700">
-              <div>
-                <div className="font-bold">{item.name}</div>
-                <div className="text-sm text-slate-500">{item.prot}g P • {item.carb}g C • {item.fat}g F</div>
-              </div>
-              <div className="text-right flex items-center gap-4">
-                <div className="text-2xl font-black text-emerald-400">{item.cals}</div>
-                <button onClick={() => deleteFoodItem(item.id)} className="text-red-500 text-lg">×</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </>
-    );
-  };
+    const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast }) => {
+      const [selected, setSelected] = useState(workouts[0]);
+      const [logData, setLogData] = useState({});
+      const today = new Date().toISOString().split('T')[0];
 
-  const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast }) => {
-    const [selected, setSelected] = useState(workouts[0]);
-    const [logData, setLogData] = useState({});
-    const today = new Date().toISOString().split('T')[0];
+      const finishWorkout = async () => {
+        if (!isReady || !userId) return showToast('Database not ready.', 'error');
 
-    const finishWorkout = async () => {
-      if (!isReady || !userId) return showToast('Database not ready.', 'error');
-      
-      const loggedExercises = Object.entries(logData).map(([ex, sets]) => ({
-        exercise: ex,
-        sets: Object.values(sets).filter(s => s.w && s.r).map(s => ({ weight: parseFloat(s.w), reps: parseInt(s.r) }))
-      })).filter(e => e.sets.length > 0);
+        const loggedExercises = Object.entries(logData).map(([ex, sets]) => ({
+          exercise: ex,
+          sets: Object.values(sets).filter(s => s.w && s.r).map(s => ({ weight: parseFloat(s.w), reps: parseInt(s.r) }))
+        })).filter(e => e.sets.length > 0);
 
-      if (loggedExercises.length === 0) return showToast('Log at least one set', 'error');
+        if (loggedExercises.length === 0) return showToast('Log at least one set', 'error');
 
-      const baseRef = DB.collection('users').doc(userId).collection('gym_logs');
-      try {
-          await baseRef.add({ 
-              date: today, 
-              timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-              workoutName: selected.name, 
-              exercises: loggedExercises 
+        const baseRef = DB.collection('users').doc(userId).collection('gym_logs');
+        try {
+          await baseRef.add({
+            date: today,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            workoutName: selected.name,
+            exercises: loggedExercises
           });
           setLogData({});
           showToast('Workout logged!', 'success');
-      } catch (e) {
+        } catch (e) {
           showToast('Logging failed. Check Security Rules.', 'error');
           console.error("Firestore Error:", e);
-      }
-    };
+        }
+      };
 
-    return (
-      <div className="space-y-6">
-        <div className="flex overflow-x-auto gap-4 pb-4 no-scrollbar">
-          {workouts.map(w => (
-            <button key={w.id} onClick={() => setSelected(w)} 
-                    className={`px-6 py-3 rounded-full font-bold transition-all ${selected.id === w.id ? 'bg-white text-black' : 'bg-slate-800'}`}>
-              {w.name}
-            </button>
-          ))}
-        </div>
-
-        {selected.exercises.map(ex => (
-          <div key={ex} className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 border border-slate-700">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-xl">{ex}</h3>
-              <button onClick={() => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [Date.now()]: { w: '', r: '' } } }))}
-                      className="text-cyan-400 text-2xl">+</button>
-            </div>
-            <div className="space-y-3">
-              {Object.entries(logData[ex] || {}).map(([id, set]) => (
-                <div key={id} className="flex gap-3">
-                  <input type="number" placeholder="kg" className="flex-1 bg-slate-950/70 rounded-lg px-4 py-3 text-center font-bold"
-                         value={set.w} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [id]: { ...set, w: e.target.value } } }))} />
-                  <input type="number" placeholder="reps" className="w-24 bg-slate-950/70 rounded-lg px-4 py-3 text-center font-bold"
-                         value={set.r} onChange={e => setLogData(prev => ({ ...prev[ex], [id]: { ...set, r: e.target.value } } ))} />
-                  <button onClick={() => setLogData(prev => { const newEx = { ...prev[ex] }; delete newEx[id]; return { ...prev, [ex]: newEx }; })}
-                          className="text-red-500">×</button>
-                </div>
-              ))}
-              {(!logData[ex] || Object.keys(logData[ex]).length === 0) && (
-                <button onClick={() => setLogData(prev => ({ ...prev, [ex]: { [Date.now()]: { w: '', r: '' } } }))}
-                        className="w-full py-4 border-2 border-dashed border-slate-600 rounded-xl text-slate-400">
-                  + Add Set
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
-
-        <button onClick={finishWorkout} className="w-full py-6 rounded-2xl font-black text-2xl text-white" style={{ background: selected.color }}>
-          Finish Workout
-        </button>
-      </div>
-    );
-  };
-
-  const CardioTab = ({ isReady, userId, showToast }) => {
-    const [type, setType] = useState('run');
-    const [distance, setDistance] = useState('');
-    const [time, setTime] = useState('');
-    const today = new Date().toISOString().split('T')[0];
-
-    const logCardio = async () => {
-      if (!isReady || !userId) return showToast('Database not ready.', 'error');
-      if (!distance || !time) return showToast('Fill all fields', 'error');
-      
-      const dist = parseFloat(distance);
-      const timeMin = parseFloat(time);
-      if (isNaN(dist) || isNaN(timeMin) || dist <= 0 || timeMin <= 0) return showToast('Invalid numbers', 'error');
-
-      const calories = type === 'run' ? Math.round(dist * 100) : type === 'cycle' ? Math.round(dist * 40) : type === 'run' ? Math.round(dist * 60) : 0; // Fixed: added 0 fallback
-
-      const baseRef = DB.collection('users').doc(userId).collection('cardio_logs');
-      try {
-          await baseRef.add({ 
-              date: today, 
-              timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-              type, 
-              distance: dist, 
-              time: timeMin, 
-              calories 
-          });
-          setDistance(''); setTime(''); 
-          showToast('Cardio logged!', 'success');
-      } catch (e) {
-          showToast('Logging failed. Check Security Rules.', 'error');
-          console.error("Firestore Error:", e);
-      }
-    };
-
-    return (
-      <div className="space-y-8">
-        <div className="bg-gradient-to-br from-orange-600 to-pink-600 rounded-3xl p-8 text-center">
-          <h2 className="text-4xl font-black mb-2">Cardio</h2>
-          <p className="text-white/80">Log your runs, rides, swims...</p>
-        </div>
-
+      return (
         <div className="space-y-6">
-          <select value={type} onChange={e => setType(e.target.value)} className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-lg font-bold">
-            <option value="run">Running</option>
-            <option value="cycle">Cycling</option>
-            <option value="swim">Swimming</option>
-            <option value="other">Other</option>
-          </select>
+          <div className="flex overflow-x-auto gap-4 pb-4 no-scrollbar">
+            {workouts.map(w => (
+              <button key={w.id} onClick={() => setSelected(w)}
+                className={`px-6 py-3 rounded-full font-bold transition-all ${selected.id === w.id ? 'bg-white text-black' : 'bg-slate-800'}`}>
+                {w.name}
+              </button>
+            ))}
+          </div>
 
-          <input type="number" placeholder="Distance (km)" value={distance} onChange={e => setDistance(e.target.value)}
-                 className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-2xl font-bold text-center" />
+          {selected.exercises.map(ex => (
+            <div key={ex} className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 border border-slate-700">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-xl">{ex}</h3>
+                <button onClick={() => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [Date.now()]: { w: '', r: '' } } }))}
+                  className="text-cyan-400 text-2xl">+</button>
+              </div>
+              <div className="space-y-3">
+                {Object.entries(logData[ex] || {}).map(([id, set]) => (
+                  <div key={id} className="flex gap-3">
+                    <input type="number" placeholder="kg" className="flex-1 bg-slate-950/70 rounded-lg px-4 py-3 text-center font-bold"
+                      value={set.w} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [id]: { ...set, w: e.target.value } } }))} />
+                    <input type="number" placeholder="reps" className="w-24 bg-slate-950/70 rounded-lg px-4 py-3 text-center font-bold"
+                      value={set.r} onChange={e => setLogData(prev => ({ ...prev[ex], [id]: { ...set, r: e.target.value } }))} />
+                    <button onClick={() => setLogData(prev => { const newEx = { ...prev[ex] }; delete newEx[id]; return { ...prev, [ex]: newEx }; })}
+                      className="text-red-500">×</button>
+                  </div>
+                ))}
+                {(!logData[ex] || Object.keys(logData[ex]).length === 0) && (
+                  <button onClick={() => setLogData(prev => ({ ...prev, [ex]: { [Date.now()]: { w: '', r: '' } } }))}
+                    className="w-full py-4 border-2 border-dashed border-slate-600 rounded-xl text-slate-400">
+                    + Add Set
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
 
-          <input type="number" placeholder="Time (minutes)" value={time} onChange={e => setTime(e.target.value)}
-                 className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-2xl font-bold text-center" />
-
-          <button onClick={logCardio} className="w-full py-6 bg-gradient-to-r from-orange-600 to-pink-600 rounded-2xl font-black text-2xl">
-            Log Cardio
+          <button onClick={finishWorkout} className="w-full py-6 rounded-2xl font-black text-2xl text-white" style={{ background: selected.color }}>
+            Finish Workout
           </button>
         </div>
-      </div>
-    );
-  };
-
-  const App = () => {
-    const [tab, setTab] = useState('summary');
-    const [foodLog, setFoodLog] = useState([]);
-    const [gymLog, setGymLog] = useState([]);
-    const [cardioLog, setCardioLog] = useState([]);
-    const [workouts, setWorkouts] = useState(loadItem('hos_workouts', DEFAULT_WORKOUTS));
-    const [toast, setToast] = useState(null);
-    const [showSettings, setShowSettings] = useState(false);
-    
-    // Persistence States
-    const [dbConfig] = useState(FIREBASE_CONFIG); // Hardcoded DB config
-    const [isDbInitialized, setIsDbInitialized] = useState(false);
-    const [userId, setUserId] = useState(null);
-    const [isLoggedIn, setIsLoggedIn] = useState(false); // TRUE if permanent user
-    const [connectionFailed, setConnectionFailed] = useState(false); 
-    const [cloudConfig, setCloudConfig] = useState(null); // Stores shared settings (e.g., GEMINI_KEY)
-    const [goals, setGoals] = useState(DEFAULT_GOALS);
-    const [unit, setUnit] = useState('kg');
-
-    const isReady = isDbInitialized && userId;
-    const today = new Date().toISOString().split('T')[0];
-
-    const showToast = (msg, type = 'success') => {
-      setToast({ msg, type });
-      setTimeout(() => setToast(null), 3000);
+      );
     };
 
-    // --- CLOUD CONFIGURATION MANAGEMENT ---
-    const loadSharedConfig = async () => {
+    const CardioTab = ({ isReady, userId, showToast }) => {
+      const [type, setType] = useState('run');
+      const [distance, setDistance] = useState('');
+      const [time, setTime] = useState('');
+      const today = new Date().toISOString().split('T')[0];
+
+      const logCardio = async () => {
+        if (!isReady || !userId) return showToast('Database not ready.', 'error');
+        if (!distance || !time) return showToast('Fill all fields', 'error');
+
+        const dist = parseFloat(distance);
+        const timeMin = parseFloat(time);
+        if (isNaN(dist) || isNaN(timeMin) || dist <= 0 || timeMin <= 0) return showToast('Invalid numbers', 'error');
+
+        const calories = type === 'run' ? Math.round(dist * 100) : type === 'cycle' ? Math.round(dist * 40) : type === 'run' ? Math.round(dist * 60) : 0; // Fixed: added 0 fallback
+
+        const baseRef = DB.collection('users').doc(userId).collection('cardio_logs');
+        try {
+          await baseRef.add({
+            date: today,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            type,
+            distance: dist,
+            time: timeMin,
+            calories
+          });
+          setDistance(''); setTime('');
+          showToast('Cardio logged!', 'success');
+        } catch (e) {
+          showToast('Logging failed. Check Security Rules.', 'error');
+          console.error("Firestore Error:", e);
+        }
+      };
+
+      return (
+        <div className="space-y-8">
+          <div className="bg-gradient-to-br from-orange-600 to-pink-600 rounded-3xl p-8 text-center">
+            <h2 className="text-4xl font-black mb-2">Cardio</h2>
+            <p className="text-white/80">Log your runs, rides, swims...</p>
+          </div>
+
+          <div className="space-y-6">
+            <select value={type} onChange={e => setType(e.target.value)} className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-lg font-bold">
+              <option value="run">Running</option>
+              <option value="cycle">Cycling</option>
+              <option value="swim">Swimming</option>
+              <option value="other">Other</option>
+            </select>
+
+            <input type="number" placeholder="Distance (km)" value={distance} onChange={e => setDistance(e.target.value)}
+              className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-2xl font-bold text-center" />
+
+            <input type="number" placeholder="Time (minutes)" value={time} onChange={e => setTime(e.target.value)}
+              className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-2xl font-bold text-center" />
+
+            <button onClick={logCardio} className="w-full py-6 bg-gradient-to-r from-orange-600 to-pink-600 rounded-2xl font-black text-2xl">
+              Log Cardio
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    const App = () => {
+      const [tab, setTab] = useState('summary');
+      const [foodLog, setFoodLog] = useState([]);
+      const [gymLog, setGymLog] = useState([]);
+      const [cardioLog, setCardioLog] = useState([]);
+      const [workouts, setWorkouts] = useState(loadItem('hos_workouts', DEFAULT_WORKOUTS));
+      const [toast, setToast] = useState(null);
+      const [showSettings, setShowSettings] = useState(false);
+
+      // Persistence States
+      const [dbConfig] = useState(FIREBASE_CONFIG); // Hardcoded DB config
+      const [isDbInitialized, setIsDbInitialized] = useState(false);
+      const [userId, setUserId] = useState(null);
+      const [isLoggedIn, setIsLoggedIn] = useState(false); // TRUE if permanent user
+      const [connectionFailed, setConnectionFailed] = useState(false);
+      const [cloudConfig, setCloudConfig] = useState(null); // Stores shared settings (e.g., GEMINI_KEY)
+      const [goals, setGoals] = useState(DEFAULT_GOALS);
+      const [unit, setUnit] = useState('kg');
+
+      const isReady = isDbInitialized && userId;
+      const today = new Date().toISOString().split('T')[0];
+
+      const showToast = (msg, type = 'success') => {
+        setToast({ msg, type });
+        setTimeout(() => setToast(null), 3000);
+      };
+
+      // --- CLOUD CONFIGURATION MANAGEMENT ---
+      const loadSharedConfig = async () => {
         if (!DB) return;
         try {
-            const doc = await DB.collection('app_config').doc('shared_keys').get();
-            let data = {};
-            if (doc.exists) {
-                data = doc.data();
-            }
-            setCloudConfig(data); // Set cloudConfig to data (even if empty)
-            GEMINI_KEY = data.geminiKey || '';
-            
+          const doc = await DB.collection('app_config').doc('shared_keys').get();
+          let data = {};
+          if (doc.exists) {
+            data = doc.data();
+          }
+          setCloudConfig(data); // Set cloudConfig to data (even if empty)
+          GEMINI_KEY = data.geminiKey || '';
+
         } catch (e) {
-            console.error("Error loading shared config:", e);
-            showToast('Could not load shared app settings.', 'error');
+          console.error("Error loading shared config:", e);
+          showToast('Could not load shared app settings.', 'error');
         }
-    };
-    
-    const loadUserSettings = async (uid) => {
+      };
+
+      const loadUserSettings = async (uid) => {
         if (!DB) return;
         try {
-            const doc = await DB.collection('users').doc(uid).collection('settings').doc('profile').get();
-            if (doc.exists) {
-                const data = doc.data();
-                if (data.goals) setGoals(data.goals);
-                if (data.unit) setUnit(data.unit);
-            }
+          const doc = await DB.collection('users').doc(uid).collection('settings').doc('profile').get();
+          if (doc.exists) {
+            const data = doc.data();
+            if (data.goals) setGoals(data.goals);
+            if (data.unit) setUnit(data.unit);
+          }
         } catch (e) {
-            console.error("Error loading user settings:", e);
+          console.error("Error loading user settings:", e);
         }
-    };
+      };
 
-    const saveSharedConfig = async (newKey) => {
+      const saveSharedConfig = async (newKey) => {
         if (!DB || !AUTH.currentUser) return;
         try {
-            const configToSave = {
-                // Ensure we merge with current cloudConfig in case other fields exist
-                ...(cloudConfig || {}), 
-                geminiKey: newKey,
-                updatedBy: AUTH.currentUser.email || AUTH.currentUser.uid,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            };
-            
-            await DB.collection('app_config').doc('shared_keys').set(configToSave, { merge: true });
-            
-            await loadSharedConfig(); 
-            showToast('Cloud settings updated!', 'success');
+          const configToSave = {
+            // Ensure we merge with current cloudConfig in case other fields exist
+            ...(cloudConfig || {}),
+            geminiKey: newKey,
+            updatedBy: AUTH.currentUser.email || AUTH.currentUser.uid,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          };
+
+          await DB.collection('app_config').doc('shared_keys').set(configToSave, { merge: true });
+
+          await loadSharedConfig();
+          showToast('Cloud settings updated!', 'success');
         } catch (e) {
-            showToast('Failed to save shared settings. Check Security Rules.', 'error');
-            console.error("Firestore Error:", e);
+          showToast('Failed to save shared settings. Check Security Rules.', 'error');
+          console.error("Firestore Error:", e);
         }
-    };
+      };
 
 
-    // --- FIREBASE INITIALIZATION ---
-    useEffect(() => {
+      // --- FIREBASE INITIALIZATION ---
+      useEffect(() => {
         if (!dbConfig.projectId || typeof firebase === 'undefined') {
-            const statusElement = document.getElementById('loader-status');
-            if (statusElement) statusElement.innerText = 'SETUP REQUIRED';
-            return;
+          const statusElement = document.getElementById('loader-status');
+          if (statusElement) statusElement.innerText = 'SETUP REQUIRED';
+          return;
         }
-        
+
         const initializeDb = () => {
-             const existingApp = firebase.apps.find(app => app.name === dbConfig.projectId);
-             if (existingApp) { existingApp.delete(); }
+          const existingApp = firebase.apps.find(app => app.name === dbConfig.projectId);
+          if (existingApp) { existingApp.delete(); }
 
-             try {
-                const app = firebase.initializeApp(dbConfig, dbConfig.projectId);
-                DB = app.firestore();
-                AUTH = app.auth();
-                DB.settings({ timestampsInSnapshots: true });
+          try {
+            const app = firebase.initializeApp(dbConfig, dbConfig.projectId);
+            DB = app.firestore();
+            AUTH = app.auth();
+            DB.settings({ timestampsInSnapshots: true });
 
-                AUTH.onAuthStateChanged(user => {
-                    if (user) {
-                        USER_ID = user.uid;
-                        setUserId(USER_ID);
-                        setIsLoggedIn(true); 
-                        setIsDbInitialized(true);
-                        setConnectionFailed(false);
-                        document.getElementById('loader-status').innerText = 'LOGGED IN';
-                        loadSharedConfig(); // CRITICAL: Load shared key first
-                        loadUserSettings(USER_ID); // Load personal goals
-                    } else {
-                        setUserId(null); 
-                        setIsLoggedIn(false);
-                        setIsDbInitialized(true); // DB is ready, just waiting for user
-                        document.getElementById('loader-status').innerText = 'AWAITING LOGIN';
-                    }
-                });
-            } catch (e) {
-                console.error("Firebase Init Error:", e);
-                const statusElement = document.getElementById('loader-status');
-                if (statusElement) statusElement.innerText = 'CONFIG ERROR';
-                setConnectionFailed(true);
-            }
+            AUTH.onAuthStateChanged(user => {
+              if (user) {
+                USER_ID = user.uid;
+                setUserId(USER_ID);
+                setIsLoggedIn(true);
+                setIsDbInitialized(true);
+                setConnectionFailed(false);
+                const statusEl = document.getElementById('loader-status');
+                if (statusEl) statusEl.innerText = 'LOGGED IN';
+                loadSharedConfig(); // CRITICAL: Load shared key first
+                loadUserSettings(USER_ID); // Load personal goals
+              } else {
+                setUserId(null);
+                setIsLoggedIn(false);
+                setIsDbInitialized(true); // DB is ready, just waiting for user
+                const statusEl = document.getElementById('loader-status');
+                if (statusEl) statusEl.innerText = 'AWAITING LOGIN';
+              }
+            });
+          } catch (e) {
+            console.error("Firebase Init Error:", e);
+            const statusElement = document.getElementById('loader-status');
+            if (statusElement) statusElement.innerText = 'CONFIG ERROR';
+            setConnectionFailed(true);
+          }
         };
 
         initializeDb();
-    }, [dbConfig]);
+      }, [dbConfig]);
 
-    // --- FIREBASE DATA LISTENERS ---
-    useEffect(() => {
+      // --- FIREBASE DATA LISTENERS ---
+      useEffect(() => {
         if (!isReady) return;
 
         const baseRef = DB.collection('users').doc(userId);
-        
+
         const unsubFood = baseRef.collection('food_logs').onSnapshot(snapshot => {
-            setFoodLog(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || b.id) - (a.timestamp?.seconds || a.id)));
+          setFoodLog(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || b.id) - (a.timestamp?.seconds || a.id)));
         }, (error) => {
-            showToast('Food data sync failed. Check Security Rules.', 'error');
+          showToast('Food data sync failed. Check Security Rules.', 'error');
         });
         const unsubGym = baseRef.collection('gym_logs').onSnapshot(snapshot => {
-            setGymLog(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || b.id) - (a.timestamp?.seconds || a.id)));
+          setGymLog(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || b.id) - (a.timestamp?.seconds || a.id)));
         });
         const unsubCardio = baseRef.collection('cardio_logs').onSnapshot(snapshot => {
-            setCardioLog(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || b.id) - (a.timestamp?.seconds || a.id)));
+          setCardioLog(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || b.id) - (a.timestamp?.seconds || a.id)));
         });
 
         return () => { unsubFood(); unsubGym(); unsubCardio(); };
-    }, [isReady, userId]);
+      }, [isReady, userId]);
 
-    // --- LOADER HIDE LOGIC (FAILSAFE) ---
-    useEffect(() => {
-      let loaderTimer;
-      
-      const hideLoader = (statusText) => {
-        const loader = document.getElementById('loader');
-        const root = document.getElementById('root');
-        if (loader && root) {
+      // --- LOADER HIDE LOGIC (FAILSAFE) ---
+      useEffect(() => {
+        let loaderTimer;
+
+        const hideLoader = (statusText) => {
+          const loader = document.getElementById('loader');
+          const root = document.getElementById('root');
+          if (loader && root) {
             const statusElement = document.getElementById('loader-status');
             if (statusElement) statusElement.innerText = statusText;
 
             loader.style.opacity = '0';
             root.style.opacity = '1';
             setTimeout(() => loader.remove(), 700);
-        }
-      };
+          }
+        };
 
-      if (isReady || connectionFailed || !dbConfig.projectId) {
+        if (isReady || connectionFailed || !dbConfig.projectId) {
           clearTimeout(loaderTimer);
           hideLoader(isReady ? 'READY' : connectionFailed ? 'ERROR' : 'SETUP REQUIRED');
-      } else {
+        } else {
           loaderTimer = setTimeout(() => {
-              setConnectionFailed(true);
+            setConnectionFailed(true);
           }, 5000);
-      }
-      
-      return () => clearTimeout(loaderTimer);
-      
-    }, [isReady, dbConfig, connectionFailed]);
+        }
+
+        return () => clearTimeout(loaderTimer);
+
+      }, [isReady, dbConfig, connectionFailed]);
 
 
-    const todaysData = useMemo(() => {
-      const food = foodLog.filter(f => f.date === today);
-      const gym = gymLog.filter(g => g.date === today);
-      const cardio = cardioLog.filter(c => c.date === today);
+      const todaysData = useMemo(() => {
+        const food = foodLog.filter(f => f.date === today);
+        const gym = gymLog.filter(g => g.date === today);
+        const cardio = cardioLog.filter(c => c.date === today);
 
-      const totals = food.reduce((a, b) => ({
-        cals: a.cals + (b.cals || 0),
-        prot: a.prot + (b.prot || 0),
-        carb: a.carb + (b.carb || 0)
-      }), { cals: 0, prot: 0, carb: 0 });
+        const totals = food.reduce((a, b) => ({
+          cals: a.cals + (b.cals || 0),
+          prot: a.prot + (b.prot || 0),
+          carb: a.carb + (b.carb || 0)
+        }), { cals: 0, prot: 0, carb: 0 });
 
-      return { food, gym, cardio, totals, goals };
-    }, [foodLog, gymLog, cardioLog, today, goals]);
+        return { food, gym, cardio, totals, goals };
+      }, [foodLog, gymLog, cardioLog, today, goals]);
 
 
-    const handleSettingsSave = (newKey, msg, type) => {
+      const handleSettingsSave = (newKey, msg, type) => {
         // 1. Update LOCAL/GLOBAL state immediately
         GEMINI_KEY = newKey;
         saveKey('hos_gemini_key', newKey);
 
         // 2. Upload to Cloud for sharing and setting Admin status
         if (AUTH.currentUser) {
-            saveSharedConfig(newKey);
+          saveSharedConfig(newKey);
         }
 
         setShowSettings(false);
         showToast(msg, type);
-    };
-    
-    const handleLogout = async () => {
+      };
+
+      const handleLogout = async () => {
         await AUTH.signOut();
         setUserId(null);
         showToast('Logged out.', 'success');
-    };
-    
-    // Determine if the app is usable or blocked
-    const isAppUsable = isReady; 
-    
-    // CRITICAL: The app must wait until it has confirmed the cloud config state (null vs {})
-    const isConfigLoaded = cloudConfig !== null; 
+      };
 
-    return (
-      <div className="max-w-md mx-auto min-h-screen pb-32 px-6 pt-8">
-        {toast && (
-          <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full z-50 font-bold shadow-2xl ${toast.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'}`}>
-            {toast.msg}
-          </div>
-        )}
+      // Determine if the app is usable or blocked
+      const isAppUsable = isReady;
 
-        {/* CONNECTION BANNER */}
-        {connectionFailed && (
-             <div className="bg-red-900/50 border border-red-500/50 p-3 rounded-xl mb-6 text-center text-sm text-red-300 font-bold">
-                 DATABASE CONNECTION FAILED. Please check settings (gear icon).
-             </div>
-        )}
+      // CRITICAL: The app must wait until it has confirmed the cloud config state (null vs {})
+      const isConfigLoaded = cloudConfig !== null;
 
-        {/* AUTH CHECK: Show login/signup if not permanently logged in */}
-        {isDbInitialized && !isLoggedIn && (
-            <div className="fixed inset-0 bg-black/80 z-40 flex items-center justify-center">
-                <AuthModal showToast={showToast} />
+      return (
+        <div className="max-w-md mx-auto min-h-screen pb-32 px-6 pt-8">
+          {toast && (
+            <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full z-50 font-bold shadow-2xl ${toast.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'}`}>
+              {toast.msg}
             </div>
-        )}
-        
-        {/* SETTINGS MODAL */}
-        <SettingsModal 
-            isVisible={showSettings} 
-            onClose={() => setShowSettings(false)} 
-            onSave={handleSettingsSave} 
-            currentKey={GEMINI_KEY} 
-            goals={goals} 
-            setGoals={setGoals} 
-        />
+          )}
 
-        {/* MAIN UI (BLOCKED IF NOT LOGGED IN) */}
-        <div className={!isAppUsable ? 'opacity-20 pointer-events-none' : ''}>
+          {/* CONNECTION BANNER */}
+          {connectionFailed && (
+            <div className="bg-red-900/50 border border-red-500/50 p-3 rounded-xl mb-6 text-center text-sm text-red-300 font-bold">
+              DATABASE CONNECTION FAILED. Please check settings (gear icon).
+            </div>
+          )}
+
+          {/* AUTH CHECK: Show login/signup if not permanently logged in */}
+          {isDbInitialized && !isLoggedIn && (
+            <div className="fixed inset-0 bg-black/80 z-40 flex items-center justify-center">
+              <AuthModal showToast={showToast} />
+            </div>
+          )}
+
+          {/* SETTINGS MODAL */}
+          <SettingsModal
+            isVisible={showSettings}
+            onClose={() => setShowSettings(false)}
+            onSave={handleSettingsSave}
+            currentKey={GEMINI_KEY}
+            goals={goals}
+            setGoals={setGoals}
+          />
+
+          {/* MAIN UI (BLOCKED IF NOT LOGGED IN) */}
+          <div className={!isAppUsable ? 'opacity-20 pointer-events-none' : ''}>
             <div className="flex justify-between items-center mb-8">
               <h1 className="text-5xl font-black">{tab === 'food' ? 'FOOD' : tab === 'gym' ? 'GYM' : tab === 'cardio' ? 'CARDIO' : 'SUMMARY'}</h1>
-              
+
               <div className="flex items-center space-x-3">
                 {isLoggedIn && (
-                    <button onClick={handleLogout} className="p-2 bg-slate-800 rounded-full text-red-400 hover:bg-slate-700 text-sm">
-                        Logout
-                    </button>
+                  <button onClick={handleLogout} className="p-2 bg-slate-800 rounded-full text-red-400 hover:bg-slate-700 text-sm">
+                    Logout
+                  </button>
                 )}
                 <button onClick={() => setShowSettings(true)} className="p-3 bg-slate-800 rounded-full">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                 </button>
               </div>
             </div>
@@ -826,20 +862,21 @@
             {tab === 'food' && <FoodTab data={todaysData} isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={isConfigLoaded} />}
             {tab === 'gym' && <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} />}
             {tab === 'cardio' && <CardioTab isReady={isReady} userId={userId} showToast={showToast} />}
-        </div>
-        
+          </div>
 
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-2xl border border-slate-800 rounded-full shadow-2xl flex z-50">
-          <button onClick={() => setTab('summary')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'summary' ? 'bg-cyan-600 text-white' : 'text-slate-500'}`}>Summary</button>
-          <button onClick={() => setTab('food')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'food' ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}>Food</button>
-          <button onClick={() => setTab('gym')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'gym' ? 'bg-pink-600 text-white' : 'text-slate-500'}`}>Gym</button>
-          <button onClick={() => setTab('cardio')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'cardio' ? 'bg-orange-600 text-white' : 'text-slate-500'}`}>Cardio</button>
-        </div>
-      </div>
-    );
-  };
 
-  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-</script>
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-2xl border border-slate-800 rounded-full shadow-2xl flex z-50">
+            <button onClick={() => setTab('summary')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'summary' ? 'bg-cyan-600 text-white' : 'text-slate-500'}`}>Summary</button>
+            <button onClick={() => setTab('food')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'food' ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}>Food</button>
+            <button onClick={() => setTab('gym')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'gym' ? 'bg-pink-600 text-white' : 'text-slate-500'}`}>Gym</button>
+            <button onClick={() => setTab('cardio')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'cardio' ? 'bg-orange-600 text-white' : 'text-slate-500'}`}>Cardio</button>
+          </div>
+        </div>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
 </body>
+
 </html>
