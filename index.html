@@ -552,9 +552,11 @@
       );
     };
 
-    const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast }) => {
+    const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setStats }) => {
       const [selected, setSelected] = useState(workouts[0]);
       const [logData, setLogData] = useState({});
+      const [newExercise, setNewExercise] = useState('');
+      const [isAdding, setIsAdding] = useState(false);
       const today = new Date().toISOString().split('T')[0];
 
       // Initialize 3 sets for each exercise when workout changes
@@ -576,6 +578,29 @@
         });
       }, [selected]);
 
+      const handleAddExercise = async () => {
+        if (!newExercise.trim()) return;
+        const updatedWorkouts = workouts.map(w => {
+          if (w.id === selected.id) {
+            return { ...w, exercises: [...w.exercises, newExercise.trim()] };
+          }
+          return w;
+        });
+
+        try {
+          // Save to Firestore
+          await DB.collection('users').doc(userId).collection('settings').doc('workouts').set({ list: updatedWorkouts });
+          setWorkouts(updatedWorkouts);
+          // Update local selected state to reflect change immediately
+          setSelected(updatedWorkouts.find(w => w.id === selected.id));
+          setNewExercise('');
+          setIsAdding(false);
+          showToast('Exercise added!', 'success');
+        } catch (e) {
+          showToast('Failed to save exercise.', 'error');
+        }
+      };
+
       const finishWorkout = async () => {
         if (!isReady || !userId) return showToast('Database not ready.', 'error');
 
@@ -587,6 +612,8 @@
         if (loggedExercises.length === 0) return showToast('Log at least one set', 'error');
 
         const baseRef = DB.collection('users').doc(userId).collection('gym_logs');
+        const statsRef = DB.collection('users').doc(userId).collection('stats').doc('exercises');
+
         try {
           await baseRef.add({
             date: today,
@@ -594,8 +621,19 @@
             workoutName: selected.name,
             exercises: loggedExercises
           });
+
+          // Update Stats (Max Weight)
+          const newStats = { ...stats };
+          loggedExercises.forEach(ex => {
+            const bestSet = ex.sets.reduce((prev, current) => (prev.weight > current.weight) ? prev : current);
+            newStats[ex.exercise] = { w: bestSet.weight, r: bestSet.reps };
+          });
+
+          await statsRef.set(newStats, { merge: true });
+          setStats(newStats);
+
           setLogData({});
-          showToast('Workout logged!', 'success');
+          showToast('Workout logged & stats updated!', 'success');
         } catch (e) {
           showToast('Logging failed. Check Security Rules.', 'error');
           console.error("Firestore Error:", e);
@@ -616,7 +654,10 @@
           {selected.exercises.map(ex => (
             <div key={ex} className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 border border-slate-700">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-xl">{ex}</h3>
+                <div>
+                  <h3 className="font-bold text-xl">{ex}</h3>
+                  {stats[ex] && <div className="text-xs text-emerald-400 font-bold mt-1">Last: {stats[ex].w}kg x {stats[ex].r}</div>}
+                </div>
                 <button onClick={() => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [Date.now()]: { w: '', r: '' } } }))}
                   className="text-cyan-400 text-sm font-bold">+ ADD SET</button>
               </div>
@@ -648,6 +689,19 @@
               </div>
             </div>
           ))}
+
+          {/* Add Exercise Section */}
+          <div className="text-center">
+            {!isAdding ? (
+              <button onClick={() => setIsAdding(true)} className="text-slate-500 text-sm font-bold hover:text-white transition-colors">+ Add Exercise to {selected.name}</button>
+            ) : (
+              <div className="flex gap-2 animate-in fade-in">
+                <input autoFocus className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3" placeholder="Exercise Name" value={newExercise} onChange={e => setNewExercise(e.target.value)} />
+                <button onClick={handleAddExercise} className="bg-cyan-600 px-6 rounded-xl font-bold">Save</button>
+                <button onClick={() => setIsAdding(false)} className="text-slate-400 px-4">Cancel</button>
+              </div>
+            )}
+          </div>
 
           <button onClick={finishWorkout} className="w-full py-6 rounded-2xl font-black text-2xl text-white" style={{ background: selected.color }}>
             Finish Workout
@@ -725,6 +779,7 @@
       const [gymLog, setGymLog] = useState([]);
       const [cardioLog, setCardioLog] = useState([]);
       const [workouts, setWorkouts] = useState(loadItem('hos_workouts', DEFAULT_WORKOUTS));
+      const [stats, setStats] = useState({});
       const [toast, setToast] = useState(null);
       const [showSettings, setShowSettings] = useState(false);
 
@@ -772,6 +827,18 @@
             const data = doc.data();
             if (data.goals) setGoals({ ...DEFAULT_GOALS, ...data.goals });
             if (data.unit) setUnit(data.unit);
+          }
+
+          // Load Workouts
+          const workoutsDoc = await DB.collection('users').doc(uid).collection('settings').doc('workouts').get();
+          if (workoutsDoc.exists) {
+            setWorkouts(workoutsDoc.data().list);
+          }
+
+          // Load Stats
+          const statsDoc = await DB.collection('users').doc(uid).collection('stats').doc('exercises').get();
+          if (statsDoc.exists) {
+            setStats(statsDoc.data());
           }
         } catch (e) {
           console.error("Error loading user settings:", e);
@@ -992,8 +1059,8 @@
             </div>
 
             {tab === 'summary' && <SummaryTab data={todaysData} allFood={foodLog} allGym={gymLog} allCardio={cardioLog} />}
-            {tab === 'food' && <FoodTab data={todaysData} isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={isConfigLoaded} />}
-            {tab === 'gym' && <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} />}
+            {tab === 'food' && <FoodTab data={todaysData} isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={!!cloudConfig} />}
+            {tab === 'gym' && <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} stats={stats} setStats={setStats} />}
             {tab === 'cardio' && <CardioTab isReady={isReady} userId={userId} showToast={showToast} />}
           </div>
 
