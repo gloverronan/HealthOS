@@ -15,7 +15,7 @@
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <!-- React 18 -->
+  <!-- React 18 (CRITICAL FIX: CORE FIRST, DOM SECOND) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -610,6 +610,7 @@
                         setIsLoggedIn(user.isAnonymous === false); // True if signed up/logged in
                         setIsDbInitialized(true);
                         setConnectionFailed(false);
+                        // Hide login if permanently logged in
                         document.getElementById('loader-status').innerText = user.isAnonymous ? 'ANONYMOUS' : 'LOGGED IN';
                     } else if (dbConfig.projectId) {
                         // Attempt Anonymous Sign-in if no user is found
