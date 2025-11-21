@@ -762,7 +762,7 @@
         )}
         
         {/* SETTINGS MODAL */}
-        <SettingsModal isVisible={showSettings} onClose={() => setShowSettings(false)} onSave={handleSettingsSave} currentKey={GEMINI_KEY} currentDbConfig={FIREBASE_CONFIG} />
+        <SettingsModal isVisible={showSettings} onClose={() => setShowSettings(false)} onSave={handleSettingsSave} currentKey={GEMINI_KEY} />
 
         {/* MAIN UI (BLOCKED IF NOT LOGGED IN) */}
         <div className={!isAppUsable ? 'opacity-20 pointer-events-none' : ''}>
