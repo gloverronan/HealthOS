@@ -8,20 +8,17 @@
   <meta name="theme-color" content="#020617">
   <title>Health OS</title>
 
-  <!-- Tailwind via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] } } } }
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-  <!-- React 18 -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <!-- FIREBASE JS SDKS (COMPATIBILITY VERSION) -->
-  <!-- These must load successfully for the persistence to work -->
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
@@ -71,12 +68,12 @@
   const SettingsModal = ({ isVisible, onClose, onSave, currentKey, currentDbConfig }) => {
     const [keyInput, setKeyInput] = useState(currentKey);
     const [dbConfig, setDbConfig] = useState(currentDbConfig);
-    const [isDbChecking, setIsDbChecking] = useState(false);
+    const [isChecking, setIsChecking] = useState(false);
 
     if (!isVisible) return null;
 
     const checkKey = async (key) => {
-        if (!key.trim()) return true; // Allows clearing the key
+        if (!key.trim()) return true;
         try {
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${key}`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -86,23 +83,26 @@
         } catch { return false; }
     };
 
+    // FIX: Safer Firebase validation by cleaning up app instance
     const checkDbValidity = async (config) => {
-        if (!config.projectId) return true; // Allows skipping DB setup
+        if (!config.projectId) return true;
+        let tempApp = null;
         try {
-            // Use a unique name for the temporary app to avoid conflicts
-            const tempApp = firebase.initializeApp(config, 'temp_check_' + Date.now());
+            const tempAppName = 'temp_check_' + Date.now();
+            tempApp = firebase.initializeApp(config, tempAppName);
             const tempDb = tempApp.firestore();
             await tempDb.collection('metadata').doc('test').get();
-            tempApp.delete();
             return true;
         } catch (e) {
             console.error("DB Check Failed:", e);
             return false;
+        } finally {
+            if (tempApp) tempApp.delete();
         }
     };
 
     const handleSave = async () => {
-        setIsDbChecking(true);
+        setIsChecking(true);
         
         let keyStatus = true;
         if (keyInput.trim()) {
@@ -114,7 +114,7 @@
             dbStatus = await checkDbValidity(dbConfig);
         }
 
-        setIsDbChecking(false);
+        setIsChecking(false);
 
         if (keyStatus && dbStatus) {
             onSave(keyInput, dbConfig, 'Settings saved and verified!');
@@ -129,7 +129,7 @@
 
     return (
       <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in" onClick={onClose}>
-        <div className className="bg-slate-900/90 border border-slate-700 p-6 rounded-xl w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        <div className="bg-slate-900/90 border border-slate-700 p-6 rounded-xl w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
           <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pb-2">Application Settings</h3>
           
           <p className="text-sm text-cyan-400 mb-4 font-bold">Persistence (Firestore Config)</p>
@@ -154,15 +154,15 @@
             placeholder="Gemini API Key"
             value={keyInput}
             onChange={e => setKeyInput(e.target.value)}
-            disabled={isDbChecking}
+            disabled={isChecking}
           />
           
           <button
             onClick={handleSave}
-            disabled={isDbChecking}
+            disabled={isChecking}
             className="w-full bg-cyan-600 py-3 rounded-xl font-bold text-lg hover:bg-cyan-500 transition-colors disabled:opacity-50 mt-4"
           >
-            {isDbChecking ? 'Verifying...' : 'Verify & Save All Settings'}
+            {isChecking ? 'Verifying...' : 'Verify & Save All Settings'}
           </button>
           <div className="text-center mt-4">
             <button onClick={onClose} className="text-slate-500 hover:text-white text-sm">Close</button>
@@ -204,10 +204,10 @@
 
         const initializeDb = () => {
              try {
-                // Ensure the app isn't already running under this ID
+                // Safely clean up existing app instance if it exists
                 const existingApp = firebase.apps.find(app => app.name === dbConfig.projectId);
                 if (existingApp) {
-                    existingApp.delete(); // Clear old instance to restart safely
+                    existingApp.delete();
                 }
 
                 const app = firebase.initializeApp(dbConfig, dbConfig.projectId);
@@ -258,7 +258,7 @@
 
     // --- LOCAL STORAGE EFFECTS ---
     useEffect(() => { saveItem('hos_workouts', workouts); }, [workouts]);
-    // GEMINI_KEY and dbConfig save is handled inside the modal logic for verification
+    // dbConfig save is handled inside the modal logic to ensure integrity
 
     useEffect(() => {
       // Hide loader once app is ready or config is missing (requiring user input)
@@ -289,12 +289,18 @@
     }, [foodLog, gymLog, cardioLog, today]);
 
     const handleSettingsSave = (gemini, dbCfg, msg, type) => {
+        // 1. Update Global Keys
         GEMINI_KEY = gemini;
+        saveKey('hos_gemini_key', GEMINI_KEY);
+        
+        // 2. Update DB Config and trigger re-init if config changed
+        const dbConfigChanged = dbCfg.projectId !== dbConfig.projectId || dbCfg.apiKey !== dbConfig.apiKey;
         setDbConfig(dbCfg);
-        // Force re-initialization if DB config changed
-        if (dbCfg.projectId !== dbConfig.projectId || dbCfg.apiKey !== dbConfig.apiKey) {
-            setIsDbInitialized(false);
+        
+        if (dbConfigChanged && dbCfg.projectId) {
+             setIsDbInitialized(false); // Trigger re-init via useEffect dependency on dbConfig
         }
+        
         setShowSettings(false);
         showToast(msg, type);
     };
@@ -415,7 +421,7 @@
             await DB.collection(`users/${userId}/food_logs/logs`).doc(docId).delete();
             showToast('Item deleted!', 'success');
         } catch (e) {
-            showToast('Deletion failed.', 'error');
+            showToast('Deletion failed. Check Security Rules.', 'error');
             console.error("Error deleting document:", e);
         }
     };
@@ -552,7 +558,7 @@
           setLogData({});
           showToast('Workout logged!', 'success');
       } catch (e) {
-          showToast('Logging failed. Database error.', 'error');
+          showToast('Logging failed. Check Security Rules.', 'error');
           console.error("Firestore Error:", e);
       }
     };
@@ -632,7 +638,7 @@
           setDistance(''); setTime(''); 
           showToast('Cardio logged!', 'success');
       } catch (e) {
-          showToast('Logging failed. Database error.', 'error');
+          showToast('Logging failed. Check Security Rules.', 'error');
           console.error("Firestore Error:", e);
       }
     };
