@@ -599,7 +599,7 @@
       );
     };
 
-    const FoodTab = ({ data, isReady, userId, showToast, isConfigLoaded, selectedDate }) => {
+    const FoodTab = ({ data, isReady, userId, showToast, isConfigLoaded, selectedDate, onSelectDate }) => {
       const deleteFoodItem = async (docId) => {
         if (!isReady || !userId) return showToast('Database not ready.', 'error');
         try {
@@ -615,8 +615,17 @@
 
       return (
         <>
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-white">{dateDisplay}</h2>
+          <div className="mb-6 flex items-center justify-between relative">
+            <h2 className="text-2xl font-bold text-white flex items-center gap-2 cursor-pointer hover:text-cyan-400 transition-colors">
+              {dateDisplay}
+              <svg className="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => onSelectDate(e.target.value)}
+                className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+              />
+            </h2>
           </div>
           <div className="mb-8">
             <NutrientLegend cals={data.totals.cals} prot={data.totals.prot} carb={data.totals.carb} fat={data.totals.fat} goals={data.goals || GOALS} />
@@ -651,7 +660,7 @@
       );
     };
 
-    const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setStats, selectedDate }) => {
+    const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setStats, selectedDate, onSelectDate }) => {
       const [selected, setSelected] = useState(workouts[0]);
       const [logData, setLogData] = useState({});
       const [newExercise, setNewExercise] = useState('');
@@ -745,8 +754,17 @@
 
       return (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-white">{dateDisplay}</h2>
+          <div className="flex items-center justify-between relative">
+            <h2 className="text-2xl font-bold text-white flex items-center gap-2 cursor-pointer hover:text-cyan-400 transition-colors">
+              {dateDisplay}
+              <svg className="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => onSelectDate(e.target.value)}
+                className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+              />
+            </h2>
           </div>
           <div className="flex overflow-x-auto gap-4 pb-4 no-scrollbar">
             {workouts.map(w => (
@@ -834,7 +852,7 @@
       );
     };
 
-    const CardioTab = ({ isReady, userId, showToast, selectedDate }) => {
+    const CardioTab = ({ isReady, userId, showToast, selectedDate, onSelectDate }) => {
       const [type, setType] = useState('run');
       const [distance, setDistance] = useState('');
       const [time, setTime] = useState('');
@@ -872,8 +890,17 @@
 
       return (
         <div className="space-y-8">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-white">{dateDisplay}</h2>
+          <div className="flex items-center justify-between relative">
+            <h2 className="text-2xl font-bold text-white flex items-center gap-2 cursor-pointer hover:text-cyan-400 transition-colors">
+              {dateDisplay}
+              <svg className="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => onSelectDate(e.target.value)}
+                className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+              />
+            </h2>
           </div>
           <div className="bg-gradient-to-br from-orange-600 to-pink-600 rounded-3xl p-8 text-center">
             <h2 className="text-4xl font-black mb-2">Cardio</h2>
@@ -1219,9 +1246,9 @@
             </div>
 
             {tab === 'summary' && <SummaryTab data={activeDayData} allFood={foodLog} allGym={gymLog} allCardio={cardioLog} selectedDate={selectedDate} onSelectDate={setSelectedDate} calendarView={calendarView} />}
-            {tab === 'food' && <FoodTab data={activeDayData} isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={!!cloudConfig} selectedDate={selectedDate} />}
-            {tab === 'gym' && <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} stats={stats} setStats={setStats} selectedDate={selectedDate} />}
-            {tab === 'cardio' && <CardioTab isReady={isReady} userId={userId} showToast={showToast} selectedDate={selectedDate} />}
+            {tab === 'food' && <FoodTab data={activeDayData} isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={!!cloudConfig} selectedDate={selectedDate} onSelectDate={setSelectedDate} />}
+            {tab === 'gym' && <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} stats={stats} setStats={setStats} selectedDate={selectedDate} onSelectDate={setSelectedDate} />}
+            {tab === 'cardio' && <CardioTab isReady={isReady} userId={userId} showToast={showToast} selectedDate={selectedDate} onSelectDate={setSelectedDate} />}
           </div>
 
 
