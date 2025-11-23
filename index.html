@@ -380,7 +380,7 @@
 
       const hasData = (d) => {
         const target = isWeek ? d : new Date(viewDate.getFullYear(), viewDate.getMonth(), d);
-        const dateStr = new Date(target.getFullYear(), target.getMonth(), target.getDate(), 12).toISOString().split('T')[0];
+        const dateStr = getLocalISODate(new Date(target.getFullYear(), target.getMonth(), target.getDate(), 12));
         return datesWithData.includes(dateStr);
       };
 
@@ -401,7 +401,7 @@
               const dateObj = isWeek ? d : new Date(viewDate.getFullYear(), viewDate.getMonth(), d);
 
               return (
-                <button key={i} onClick={() => onSelect(new Date(dateObj.getFullYear(), dateObj.getMonth(), dayNum, 12).toISOString().split('T')[0])}
+                <button key={i} onClick={() => onSelect(getLocalISODate(new Date(dateObj.getFullYear(), dateObj.getMonth(), dayNum, 12)))}
                   className={`relative py-2 rounded-lg font-bold transition-all ${isSelected(isWeek ? d : dayNum) ? 'bg-cyan-600 text-white' : 'hover:bg-slate-800 text-slate-300'} ${isToday(isWeek ? d : dayNum) ? 'border border-cyan-500' : ''}`}>
                   {dayNum}
                   {hasData(isWeek ? d : dayNum) && <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-emerald-400 rounded-full" />}
@@ -604,7 +604,7 @@
         }
       };
 
-      const isToday = selectedDate === new Date().toISOString().split('T')[0];
+      const isToday = selectedDate === getLocalISODate();
       const dateDisplay = isToday ? 'Today' : new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
       return (
@@ -734,7 +734,7 @@
         }
       };
 
-      const isToday = selectedDate === new Date().toISOString().split('T')[0];
+      const isToday = selectedDate === getLocalISODate();
       const dateDisplay = isToday ? 'Today' : new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
       return (
@@ -861,7 +861,7 @@
         }
       };
 
-      const isToday = selectedDate === new Date().toISOString().split('T')[0];
+      const isToday = selectedDate === getLocalISODate();
       const dateDisplay = isToday ? 'Today' : new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
       return (
@@ -898,7 +898,7 @@
 
     const App = () => {
       const [tab, setTab] = useState('summary');
-      const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+      const [selectedDate, setSelectedDate] = useState(getLocalISODate());
       const [calendarView, setCalendarView] = useState('week');
       const [foodLog, setFoodLog] = useState([]);
       const [gymLog, setGymLog] = useState([]);
@@ -919,7 +919,7 @@
       const [unit, setUnit] = useState('kg');
 
       const isReady = isDbInitialized && userId;
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalISODate();
 
       const showToast = (msg, type = 'success') => {
         setToast({ msg, type });
