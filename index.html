@@ -443,6 +443,9 @@
 
       return (
         <div className="space-y-6">
+          {/* Top: Calendar */}
+          <Calendar datesWithData={datesWithData} selectedDate={selectedDate} onSelect={onSelectDate} viewMode={calendarView} />
+
           <div className="grid grid-cols-2 gap-4">
             {/* Left: Rings (Food) */}
             <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-4 border border-slate-700 flex flex-col items-center">
@@ -479,9 +482,6 @@
               </div>
             </div>
           </div>
-
-          {/* Bottom: Calendar */}
-          <Calendar datesWithData={datesWithData} selectedDate={selectedDate} onSelect={onSelectDate} viewMode={calendarView} />
         </div>
       );
     };
@@ -902,6 +902,33 @@
       );
     };
 
+    const FloatingMenu = ({ tab, setTab }) => {
+      const [isOpen, setIsOpen] = useState(false);
+
+      const toggleMenu = () => setIsOpen(!isOpen);
+      const selectTab = (t) => {
+        setTab(t);
+        setIsOpen(false);
+      };
+
+      return (
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+          {/* Expanded Menu Options */}
+          <div className={`flex flex-col gap-2 transition-all duration-300 origin-bottom-right ${isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-90 translate-y-10 pointer-events-none'}`}>
+            <button onClick={() => selectTab('summary')} className={`px-6 py-3 rounded-full font-bold text-sm shadow-xl backdrop-blur-xl border border-slate-700 transition-colors ${tab === 'summary' ? 'bg-cyan-600 text-white' : 'bg-slate-900/90 text-slate-400 hover:text-white'}`}>Summary</button>
+            <button onClick={() => selectTab('food')} className={`px-6 py-3 rounded-full font-bold text-sm shadow-xl backdrop-blur-xl border border-slate-700 transition-colors ${tab === 'food' ? 'bg-emerald-600 text-white' : 'bg-slate-900/90 text-slate-400 hover:text-white'}`}>Food</button>
+            <button onClick={() => selectTab('gym')} className={`px-6 py-3 rounded-full font-bold text-sm shadow-xl backdrop-blur-xl border border-slate-700 transition-colors ${tab === 'gym' ? 'bg-pink-600 text-white' : 'bg-slate-900/90 text-slate-400 hover:text-white'}`}>Gym</button>
+            <button onClick={() => selectTab('cardio')} className={`px-6 py-3 rounded-full font-bold text-sm shadow-xl backdrop-blur-xl border border-slate-700 transition-colors ${tab === 'cardio' ? 'bg-orange-600 text-white' : 'bg-slate-900/90 text-slate-400 hover:text-white'}`}>Cardio</button>
+          </div>
+
+          {/* Main Toggle Button */}
+          <button onClick={toggleMenu} className={`w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 ${isOpen ? 'bg-slate-800 rotate-45' : 'bg-gradient-to-br from-cyan-500 to-blue-600 hover:scale-105'}`}>
+            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+          </button>
+        </div>
+      );
+    };
+
     const App = () => {
       const [tab, setTab] = useState('summary');
       const [selectedDate, setSelectedDate] = useState(getLocalISODate());
@@ -1198,12 +1225,7 @@
           </div>
 
 
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-2xl border border-slate-800 rounded-full shadow-2xl flex z-50">
-            <button onClick={() => setTab('summary')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'summary' ? 'bg-cyan-600 text-white' : 'text-slate-500'}`}>Summary</button>
-            <button onClick={() => setTab('food')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'food' ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}>Food</button>
-            <button onClick={() => setTab('gym')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'gym' ? 'bg-pink-600 text-white' : 'text-slate-500'}`}>Gym</button>
-            <button onClick={() => setTab('cardio')} className={`px-8 py-4 rounded-full font-black text-sm ${tab === 'cardio' ? 'bg-orange-600 text-white' : 'text-slate-500'}`}>Cardio</button>
-          </div>
+          <FloatingMenu tab={tab} setTab={setTab} />
         </div>
       );
     };
