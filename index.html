@@ -256,7 +256,7 @@
     };
 
     // --- SETTINGS MODAL ---
-    const SettingsModal = ({ isVisible, onClose, onSave, currentKey, goals, setGoals }) => {
+    const SettingsModal = ({ isVisible, onClose, onSave, currentKey, goals, setGoals, calendarView, setCalendarView }) => {
       const [localGoals, setLocalGoals] = useState(goals);
 
       // Update local state when prop changes (after cloud load)
@@ -295,6 +295,14 @@
             </div>
 
             <div className="mt-6 bg-slate-800 p-4 rounded-lg">
+              <p className="text-sm text-slate-400 font-bold">Calendar View:</p>
+              <div className="flex bg-slate-950 rounded-lg p-1 mt-2">
+                <button onClick={() => setCalendarView('week')} className={`flex-1 py-2 rounded-md text-sm font-bold transition-all ${calendarView === 'week' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>Weekly</button>
+                <button onClick={() => setCalendarView('month')} className={`flex-1 py-2 rounded-md text-sm font-bold transition-all ${calendarView === 'month' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>Monthly</button>
+              </div>
+            </div>
+
+            <div className="mt-6 bg-slate-800 p-4 rounded-lg">
               <p className="text-sm text-slate-400 font-bold">AI Status:</p>
               <p className={`text-lg font-bold mt-1 ${currentKey ? 'text-emerald-400' : 'text-red-400'}`}>
                 {currentKey ? 'AI Key Loaded from Cloud.' : 'AI Key Missing.'}
@@ -312,9 +320,13 @@
     };
 
     // --- CALENDAR COMPONENT ---
-    const Calendar = ({ datesWithData, selectedDate, onSelect }) => {
+    const Calendar = ({ datesWithData, selectedDate, onSelect, viewMode = 'week' }) => {
       const [viewDate, setViewDate] = useState(new Date());
-      const [viewMode, setViewMode] = useState('month'); // 'month' | 'week'
+
+      // Reset viewDate to selectedDate when selectedDate changes to ensure visibility
+      useEffect(() => {
+        setViewDate(new Date(selectedDate));
+      }, [selectedDate]);
 
       const getDays = () => {
         if (viewMode === 'month') {
@@ -376,9 +388,9 @@
         <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-4 border border-slate-700">
           <div className="flex justify-between items-center mb-2">
             <button onClick={() => changeView(-1)} className="p-1 hover:bg-slate-800 rounded-full">←</button>
-            <button onClick={() => setViewMode(prev => prev === 'month' ? 'week' : 'month')} className="font-bold text-base hover:text-cyan-400 transition-colors">
-              {label} <span className="text-xs text-slate-500 ml-1">({viewMode === 'month' ? 'M' : 'W'})</span>
-            </button>
+            <div className="font-bold text-base text-slate-300">
+              {label}
+            </div>
             <button onClick={() => changeView(1)} className="p-1 hover:bg-slate-800 rounded-full">→</button>
           </div>
           <div className="grid grid-cols-7 gap-1 text-center text-xs">
@@ -403,9 +415,7 @@
 
     // --- TAB COMPONENTS ---
 
-    const SummaryTab = ({ data, allFood, allGym, allCardio }) => {
-      const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-
+    const SummaryTab = ({ data, allFood, allGym, allCardio, selectedDate, onSelectDate, calendarView }) => {
       const datesWithData = useMemo(() => {
         return [...new Set([...allFood.map(f => f.date), ...allGym.map(g => g.date), ...allCardio.map(c => c.date)])];
       }, [allFood, allGym, allCardio]);
@@ -465,18 +475,17 @@
           </div>
 
           {/* Bottom: Calendar */}
-          <Calendar datesWithData={datesWithData} selectedDate={selectedDate} onSelect={setSelectedDate} />
+          <Calendar datesWithData={datesWithData} selectedDate={selectedDate} onSelect={onSelectDate} viewMode={calendarView} />
         </div>
       );
     };
 
-    const GeminiFoodEntry = ({ isReady, userId, showToast, isConfigLoaded }) => {
+    const GeminiFoodEntry = ({ isReady, userId, showToast, isConfigLoaded, selectedDate }) => {
       const [input, setInput] = useState('');
       const [loading, setLoading] = useState(false);
       const [result, setResult] = useState(null);
       const [entryTime, setEntryTime] = useState(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
       const [category, setCategory] = useState('Snack');
-      const today = new Date().toISOString().split('T')[0];
 
       const getCategory = (time) => {
         const hour = parseInt(time.split(':')[0]);
@@ -528,7 +537,7 @@
 
         try {
           await baseRef.add({
-            date: today,
+            date: selectedDate,
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             name: result.name,
             cals: Number(result.cals) || 0,
@@ -584,7 +593,7 @@
       );
     };
 
-    const FoodTab = ({ data, isReady, userId, showToast, isConfigLoaded }) => {
+    const FoodTab = ({ data, isReady, userId, showToast, isConfigLoaded, selectedDate }) => {
       const deleteFoodItem = async (docId) => {
         if (!isReady || !userId) return showToast('Database not ready.', 'error');
         try {
@@ -595,12 +604,18 @@
         }
       };
 
+      const isToday = selectedDate === new Date().toISOString().split('T')[0];
+      const dateDisplay = isToday ? 'Today' : new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
       return (
         <>
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-white">{dateDisplay}</h2>
+          </div>
           <div className="mb-8">
             <NutrientLegend cals={data.totals.cals} prot={data.totals.prot} carb={data.totals.carb} fat={data.totals.fat} goals={data.goals || GOALS} />
           </div>
-          <GeminiFoodEntry isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={isConfigLoaded} />
+          <GeminiFoodEntry isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={isConfigLoaded} selectedDate={selectedDate} />
           <div className="space-y-4">
             {!isReady && <div className="text-center text-slate-500 py-6">Waiting for Database connection...</div>}
             {['Breakfast', 'Lunch', 'Dinner', 'Snack'].map(category => {
@@ -630,13 +645,12 @@
       );
     };
 
-    const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setStats }) => {
+    const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setStats, selectedDate }) => {
       const [selected, setSelected] = useState(workouts[0]);
       const [logData, setLogData] = useState({});
       const [newExercise, setNewExercise] = useState('');
       const [isAdding, setIsAdding] = useState(false);
       const [skippedExercises, setSkippedExercises] = useState([]);
-      const today = new Date().toISOString().split('T')[0];
 
       // Initialize 3 sets for each exercise when workout changes
       useEffect(() => {
@@ -696,7 +710,7 @@
 
         try {
           await baseRef.add({
-            date: today,
+            date: selectedDate,
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             workoutName: selected.name,
             exercises: loggedExercises
@@ -720,8 +734,14 @@
         }
       };
 
+      const isToday = selectedDate === new Date().toISOString().split('T')[0];
+      const dateDisplay = isToday ? 'Today' : new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
       return (
         <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-white">{dateDisplay}</h2>
+          </div>
           <div className="flex overflow-x-auto gap-4 pb-4 no-scrollbar">
             {workouts.map(w => (
               <button key={w.id} onClick={() => setSelected(w)}
@@ -808,11 +828,10 @@
       );
     };
 
-    const CardioTab = ({ isReady, userId, showToast }) => {
+    const CardioTab = ({ isReady, userId, showToast, selectedDate }) => {
       const [type, setType] = useState('run');
       const [distance, setDistance] = useState('');
       const [time, setTime] = useState('');
-      const today = new Date().toISOString().split('T')[0];
 
       const logCardio = async () => {
         if (!isReady || !userId) return showToast('Database not ready.', 'error');
@@ -827,7 +846,7 @@
         const baseRef = DB.collection('users').doc(userId).collection('cardio_logs');
         try {
           await baseRef.add({
-            date: today,
+            date: selectedDate,
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             type,
             distance: dist,
@@ -842,8 +861,14 @@
         }
       };
 
+      const isToday = selectedDate === new Date().toISOString().split('T')[0];
+      const dateDisplay = isToday ? 'Today' : new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
       return (
         <div className="space-y-8">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-white">{dateDisplay}</h2>
+          </div>
           <div className="bg-gradient-to-br from-orange-600 to-pink-600 rounded-3xl p-8 text-center">
             <h2 className="text-4xl font-black mb-2">Cardio</h2>
             <p className="text-white/80">Log your runs, rides, swims...</p>
@@ -873,6 +898,8 @@
 
     const App = () => {
       const [tab, setTab] = useState('summary');
+      const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+      const [calendarView, setCalendarView] = useState('week');
       const [foodLog, setFoodLog] = useState([]);
       const [gymLog, setGymLog] = useState([]);
       const [cardioLog, setCardioLog] = useState([]);
@@ -1065,10 +1092,10 @@
       }, [isReady, dbConfig, connectionFailed]);
 
 
-      const todaysData = useMemo(() => {
-        const food = foodLog.filter(f => f.date === today);
-        const gym = gymLog.filter(g => g.date === today);
-        const cardio = cardioLog.filter(c => c.date === today);
+      const activeDayData = useMemo(() => {
+        const food = foodLog.filter(f => f.date === selectedDate);
+        const gym = gymLog.filter(g => g.date === selectedDate);
+        const cardio = cardioLog.filter(c => c.date === selectedDate);
 
         const totals = food.reduce((a, b) => ({
           cals: a.cals + (b.cals || 0),
@@ -1078,7 +1105,7 @@
         }), { cals: 0, prot: 0, carb: 0, fat: 0 });
 
         return { food, gym, cardio, totals, goals };
-      }, [foodLog, gymLog, cardioLog, today, goals]);
+      }, [foodLog, gymLog, cardioLog, selectedDate, goals]);
 
 
       const handleSettingsSave = (newKey, msg, type) => {
@@ -1137,6 +1164,8 @@
             currentKey={GEMINI_KEY}
             goals={goals}
             setGoals={setGoals}
+            calendarView={calendarView}
+            setCalendarView={setCalendarView}
           />
 
           {/* MAIN UI (BLOCKED IF NOT LOGGED IN) */}
@@ -1156,10 +1185,10 @@
               </div>
             </div>
 
-            {tab === 'summary' && <SummaryTab data={todaysData} allFood={foodLog} allGym={gymLog} allCardio={cardioLog} />}
-            {tab === 'food' && <FoodTab data={todaysData} isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={!!cloudConfig} />}
-            {tab === 'gym' && <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} stats={stats} setStats={setStats} />}
-            {tab === 'cardio' && <CardioTab isReady={isReady} userId={userId} showToast={showToast} />}
+            {tab === 'summary' && <SummaryTab data={activeDayData} allFood={foodLog} allGym={gymLog} allCardio={cardioLog} selectedDate={selectedDate} onSelectDate={setSelectedDate} calendarView={calendarView} />}
+            {tab === 'food' && <FoodTab data={activeDayData} isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={!!cloudConfig} selectedDate={selectedDate} />}
+            {tab === 'gym' && <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} stats={stats} setStats={setStats} selectedDate={selectedDate} />}
+            {tab === 'cardio' && <CardioTab isReady={isReady} userId={userId} showToast={showToast} selectedDate={selectedDate} />}
           </div>
 
 
