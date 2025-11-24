@@ -328,12 +328,35 @@
     // --- EDIT FOOD MODAL ---
     const EditFoodModal = ({ item, onClose, onSave }) => {
       const [edited, setEdited] = useState(item);
+      const [baseValues, setBaseValues] = useState(null);
 
       useEffect(() => {
         setEdited(item);
+        if (item) {
+          const qty = item.quantity || 1;
+          setBaseValues({
+            cals: (item.cals || 0) / qty,
+            prot: (item.prot || 0) / qty,
+            carb: (item.carb || 0) / qty,
+            fat: (item.fat || 0) / qty
+          });
+        }
       }, [item]);
 
       if (!item || !edited) return null;
+
+      const handleQuantityChange = (val) => {
+        const q = parseFloat(val);
+        const newEdited = { ...edited, quantity: val }; // Allow string for typing
+
+        if (!isNaN(q) && baseValues) {
+          newEdited.cals = Math.round(baseValues.cals * q);
+          newEdited.prot = Math.round(baseValues.prot * q);
+          newEdited.carb = Math.round(baseValues.carb * q);
+          newEdited.fat = Math.round(baseValues.fat * q);
+        }
+        setEdited(newEdited);
+      };
 
       const handleSave = () => {
         onSave(edited);
@@ -354,7 +377,7 @@
               <div>
                 <label className="text-xs text-slate-500 uppercase font-bold">Quantity</label>
                 <input type="number" className="w-full bg-slate-950/70 border border-slate-700 rounded-lg p-3 text-lg font-bold mt-1"
-                  value={edited.quantity || 1} onChange={e => setEdited({ ...edited, quantity: Number(e.target.value) })} />
+                  value={edited.quantity || 1} onChange={e => handleQuantityChange(e.target.value)} />
               </div>
 
               <div className="grid grid-cols-4 gap-3">
