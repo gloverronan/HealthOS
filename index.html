@@ -106,9 +106,48 @@
     let GEMINI_KEY = ''; // Cloud managed
 
     const DEFAULT_WORKOUTS = [
-      { id: "push", name: "Push", color: "#ec4899", exercises: ["Bench Press", "Overhead Press", "Incline Dumbbell Press", "Lateral Raises", "Tricep Pushdowns", "Skullcrushers"] },
-      { id: "legs", name: "Legs", color: "#3b82f6", exercises: ["Squat", "Romanian Deadlift", "Leg Press", "Leg Extensions", "Hamstring Curls", "Calf Raises"] },
-      { id: "pull", name: "Pull", color: "#10b981", exercises: ["Pull-ups", "Barbell Row", "Lat Pulldowns", "Face Pulls", "Bicep Curls", "Hammer Curls"] }
+      {
+        id: "push",
+        name: "Push",
+        color: "#ec4899",
+        emoji: "😤",
+        exercises: [
+          { name: "Bench Press", bodyweight: false },
+          { name: "Overhead Press", bodyweight: false },
+          { name: "Incline Dumbbell Press", bodyweight: false },
+          { name: "Lateral Raises", bodyweight: false },
+          { name: "Tricep Pushdowns", bodyweight: false },
+          { name: "Skullcrushers", bodyweight: false }
+        ]
+      },
+      {
+        id: "legs",
+        name: "Legs",
+        color: "#3b82f6",
+        emoji: "🍗",
+        exercises: [
+          { name: "Squat", bodyweight: false },
+          { name: "Romanian Deadlift", bodyweight: false },
+          { name: "Leg Press", bodyweight: false },
+          { name: "Leg Extensions", bodyweight: false },
+          { name: "Hamstring Curls", bodyweight: false },
+          { name: "Calf Raises", bodyweight: false }
+        ]
+      },
+      {
+        id: "pull",
+        name: "Pull",
+        color: "#10b981",
+        emoji: "🦍",
+        exercises: [
+          { name: "Pull-ups", bodyweight: true },
+          { name: "Barbell Row", bodyweight: false },
+          { name: "Lat Pulldowns", bodyweight: false },
+          { name: "Face Pulls", bodyweight: false },
+          { name: "Bicep Curls", bodyweight: false },
+          { name: "Hammer Curls", bodyweight: false }
+        ]
+      }
     ];
 
     // --- FIREBASE GLOBALS ---
@@ -867,7 +906,8 @@
             const defaultExercises = selected.exercises || [];
             const newLogData = {};
             defaultExercises.forEach(ex => {
-              newLogData[ex] = {
+              const name = typeof ex === 'string' ? ex : ex.name;
+              newLogData[name] = {
                 [Date.now() + Math.random()]: { w: '', r: '' },
                 [Date.now() + Math.random()]: { w: '', r: '' },
                 [Date.now() + Math.random()]: { w: '', r: '' }
@@ -1039,7 +1079,7 @@
               {workouts.map(w => (
                 <button key={w.id} onClick={() => setSelected(w)} className="bg-slate-900/80 border border-slate-700 p-8 rounded-3xl flex items-center justify-between hover:bg-slate-800 transition-all hover:scale-[1.02] group" style={{ borderColor: w.color }}>
                   <span className="text-3xl font-black text-white">{w.name}</span>
-                  <span className="text-4xl group-hover:scale-110 transition-transform">💪</span>
+                  <span className="text-4xl group-hover:scale-110 transition-transform">{w.emoji || '💪'}</span>
                 </button>
               ))}
             </div>
@@ -1059,7 +1099,10 @@
 
           <div className="space-y-4">
             {activeExercises.map((ex, idx) => {
-              const isBodyweight = exerciseSettings?.[ex]?.type === 'bodyweight';
+              // Check settings OR default workout definition for bodyweight status
+              const defaultEx = selected.exercises.find(e => (typeof e === 'string' ? e : e.name) === ex);
+              const isBodyweight = exerciseSettings?.[ex]?.type === 'bodyweight' || defaultEx?.bodyweight;
+
               return (
                 <div
                   key={ex}
@@ -1473,7 +1516,14 @@
       const [foodLog, setFoodLog] = useState([]);
       const [gymLog, setGymLog] = useState([]);
       const [cardioLog, setCardioLog] = useState([]);
-      const [workouts, setWorkouts] = useState(loadItem('hos_workouts', DEFAULT_WORKOUTS));
+      const [workouts, setWorkouts] = useState(() => {
+        const loaded = loadItem('hos_workouts', DEFAULT_WORKOUTS);
+        // Migration: If exercises are strings, convert to objects
+        return loaded.map(w => ({
+          ...w,
+          exercises: w.exercises.map(ex => typeof ex === 'string' ? { name: ex, bodyweight: false } : ex)
+        }));
+      });
       const [exerciseSettings, setExerciseSettings] = useState({}); // New state for exercise metadata
       const [editingLog, setEditingLog] = useState(null); // Lifted state for activity editing
       const [stats, setStats] = useState({});
