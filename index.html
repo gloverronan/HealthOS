@@ -325,6 +325,58 @@
       );
     };
 
+    // --- EDIT FOOD MODAL ---
+    const EditFoodModal = ({ item, onClose, onSave }) => {
+      const [edited, setEdited] = useState(item);
+
+      useEffect(() => {
+        setEdited(item);
+      }, [item]);
+
+      if (!item) return null;
+
+      const handleSave = () => {
+        onSave(edited);
+      };
+
+      return (
+        <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in" onClick={onClose}>
+          <div className="bg-slate-900/90 border border-slate-700 p-6 rounded-xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pb-2">Edit Entry</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-500 uppercase font-bold">Name</label>
+                <input className="w-full bg-slate-950/70 border border-slate-700 rounded-lg p-3 text-lg font-bold mt-1"
+                  value={edited.name} onChange={e => setEdited({ ...edited, name: e.target.value })} />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-500 uppercase font-bold">Quantity</label>
+                <input type="number" className="w-full bg-slate-950/70 border border-slate-700 rounded-lg p-3 text-lg font-bold mt-1"
+                  value={edited.quantity || 1} onChange={e => setEdited({ ...edited, quantity: Number(e.target.value) })} />
+              </div>
+
+              <div className="grid grid-cols-4 gap-3">
+                {['cals', 'prot', 'carb', 'fat'].map(k => (
+                  <div key={k}>
+                    <label className="text-[10px] text-slate-500 uppercase font-bold block text-center mb-1">{k}</label>
+                    <input type="number" className="w-full bg-slate-950/70 border border-slate-700 rounded-lg p-2 text-center font-bold"
+                      value={edited[k]} onChange={e => setEdited({ ...edited, [k]: Number(e.target.value) })} />
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button onClick={onClose} className="flex-1 py-3 bg-slate-800 rounded-xl font-bold hover:bg-slate-700">Cancel</button>
+                <button onClick={handleSave} className="flex-1 py-3 bg-emerald-600 rounded-xl font-bold hover:bg-emerald-500">Save Changes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     // --- CALENDAR COMPONENT ---
     const Calendar = ({ datesWithData, selectedDate, onSelect, viewMode = 'week' }) => {
       const [viewDate, setViewDate] = useState(new Date());
@@ -490,6 +542,8 @@
       const [input, setInput] = useState('');
       const [loading, setLoading] = useState(false);
       const [result, setResult] = useState(null);
+      const [baseResult, setBaseResult] = useState(null);
+      const [quantity, setQuantity] = useState(1);
       const [entryTime, setEntryTime] = useState(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
       const [category, setCategory] = useState('Snack');
 
@@ -529,12 +583,28 @@
           const jsonString = responseText.trim().replace(/```json|```/g, '');
           const json = JSON.parse(jsonString);
           setResult(json);
+          setBaseResult(json);
+          setQuantity(1);
 
         } catch (e) {
           showToast('AI failed. Check key/input.', 'error');
           console.error("Gemini Failure:", e);
         }
         setLoading(false);
+      };
+
+      const handleQuantityChange = (val) => {
+        const q = parseFloat(val);
+        setQuantity(val); // Allow string for typing
+        if (!isNaN(q) && baseResult) {
+          setResult({
+            ...result,
+            cals: Math.round(baseResult.cals * q),
+            prot: Math.round(baseResult.prot * q),
+            carb: Math.round(baseResult.carb * q),
+            fat: Math.round(baseResult.fat * q)
+          });
+        }
       };
 
       const add = async () => {
@@ -550,11 +620,14 @@
             prot: Number(result.prot) || 0,
             carb: Number(result.carb) || 0,
             fat: Number(result.fat) || 0,
+            quantity: Number(quantity) || 1,
             time: entryTime,
             category: category
           });
           setInput('');
           setResult(null);
+          setBaseResult(null);
+          setQuantity(1);
           showToast('Food logged!', 'success');
         } catch (e) {
           showToast('Logging failed. Database error.', 'error');
@@ -585,11 +658,21 @@
           </div>
           {result && (
             <div className="space-y-4 animate-in fade-in">
-              <input className="w-full bg-transparent text-xl font-bold outline-none border-b border-slate-600" value={result.name} onChange={e => setResult({ ...result, name: e.target.value })} />
+              <div className="flex gap-4">
+                <input className="flex-[2] bg-transparent text-xl font-bold outline-none border-b border-slate-600" value={result.name} onChange={e => setResult({ ...result, name: e.target.value })} />
+                <div className="flex-1 flex items-center gap-2 border-b border-slate-600">
+                  <span className="text-slate-500 text-sm font-bold">Qty:</span>
+                  <input type="number" className="w-full bg-transparent text-xl font-bold outline-none text-center"
+                    value={quantity} onChange={e => handleQuantityChange(e.target.value)} />
+                </div>
+              </div>
               <div className="grid grid-cols-4 gap-4">
                 {['cals', 'prot', 'carb', 'fat'].map(k => (
-                  <input key={k} type="number" className="bg-slate-950/70 rounded-lg p-3 text-center text-xl font-bold"
-                    value={result[k]} onChange={e => setResult({ ...result, [k]: e.target.value })} placeholder={k} />
+                  <div key={k} className="relative">
+                    <input type="number" className="w-full bg-slate-950/70 rounded-lg p-3 text-center text-xl font-bold"
+                      value={result[k]} onChange={e => setResult({ ...result, [k]: e.target.value })} />
+                    <div className="text-[10px] text-slate-500 text-center uppercase mt-1 font-bold">{k}</div>
+                  </div>
                 ))}
               </div>
               <button onClick={add} className="w-full bg-emerald-600 py-4 rounded-xl font-bold text-lg">Add to Today</button>
@@ -600,6 +683,8 @@
     };
 
     const FoodTab = ({ data, isReady, userId, showToast, isConfigLoaded, selectedDate, onSelectDate }) => {
+      const [editingItem, setEditingItem] = useState(null);
+
       const deleteFoodItem = async (docId) => {
         if (!isReady || !userId) return showToast('Database not ready.', 'error');
         try {
@@ -610,11 +695,32 @@
         }
       };
 
+      const updateFoodItem = async (updatedItem) => {
+        if (!isReady || !userId) return showToast('Database not ready.', 'error');
+        try {
+          await DB.collection('users').doc(userId).collection('food_logs').doc(updatedItem.id).update({
+            name: updatedItem.name,
+            quantity: Number(updatedItem.quantity) || 1,
+            cals: Number(updatedItem.cals) || 0,
+            prot: Number(updatedItem.prot) || 0,
+            carb: Number(updatedItem.carb) || 0,
+            fat: Number(updatedItem.fat) || 0,
+          });
+          setEditingItem(null);
+          showToast('Item updated!', 'success');
+        } catch (e) {
+          showToast('Update failed.', 'error');
+          console.error(e);
+        }
+      };
+
       const isToday = selectedDate === getLocalISODate();
       const dateDisplay = isToday ? 'Today' : new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
       return (
         <>
+          <EditFoodModal item={editingItem} onClose={() => setEditingItem(null)} onSave={updateFoodItem} />
+
           <div className="mb-6 flex items-center justify-between relative">
             <h2 className="text-2xl font-bold text-white flex items-center gap-2 cursor-pointer hover:text-cyan-400 transition-colors">
               {dateDisplay}
@@ -641,14 +747,17 @@
                 <div key={category} className="space-y-3">
                   <h3 className="text-xl font-bold text-slate-300 pl-1">{category}</h3>
                   {items.map(item => (
-                    <div key={item.id} className="bg-slate-900/80 backdrop-blur-xl rounded-xl p-5 flex justify-between items-center border border-slate-700">
+                    <div key={item.id} onClick={() => setEditingItem(item)} className="bg-slate-900/80 backdrop-blur-xl rounded-xl p-5 flex justify-between items-center border border-slate-700 cursor-pointer hover:bg-slate-800 transition-colors">
                       <div>
-                        <div className="font-bold">{item.name}</div>
+                        <div className="font-bold flex items-center gap-2">
+                          {item.name}
+                          {item.quantity && item.quantity > 1 && <span className="text-xs bg-slate-700 px-2 py-0.5 rounded-full text-slate-300">x{item.quantity}</span>}
+                        </div>
                         <div className="text-sm text-slate-500">{item.prot}g P • {item.carb}g C • {item.fat}g F</div>
                       </div>
                       <div className="text-right flex items-center gap-4">
                         <div className="text-2xl font-black text-emerald-400">{item.cals}</div>
-                        <button onClick={() => deleteFoodItem(item.id)} className="text-red-500 text-lg">×</button>
+                        <button onClick={(e) => { e.stopPropagation(); deleteFoodItem(item.id); }} className="text-red-500 text-lg hover:text-red-400 transition-colors">×</button>
                       </div>
                     </div>
                   ))}
