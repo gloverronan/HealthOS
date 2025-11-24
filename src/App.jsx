@@ -245,7 +245,7 @@ const App = () => {
             }
         };
 
-        if (isReady || connectionFailed) {
+        if (isDbInitialized || connectionFailed) {
             clearTimeout(loaderTimer);
             hideLoader(isReady ? 'READY' : 'ERROR');
         } else {
