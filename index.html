@@ -496,7 +496,7 @@
 
     // --- TAB COMPONENTS ---
 
-    const SummaryTab = ({ data, allFood, allGym, allCardio, selectedDate, onSelectDate, calendarView }) => {
+    const SummaryTab = ({ data, allFood, allGym, allCardio, selectedDate, onSelectDate, calendarView, onNavigate, onSubNavigate }) => {
       const datesWithData = useMemo(() => {
         return [...new Set([...allFood.map(f => f.date), ...allGym.map(g => g.date), ...allCardio.map(c => c.date)])];
       }, [allFood, allGym, allCardio]);
@@ -535,7 +535,7 @@
                 {dayData.gym.length === 0 && dayData.cardio.length === 0 && <div className="text-slate-500 text-center py-8 text-sm">No activity.</div>}
 
                 {dayData.gym.map(g => (
-                  <div key={g.id} className="bg-slate-950/50 p-3 rounded-xl border-l-4 border-cyan-500">
+                  <div key={g.id} onClick={() => { onNavigate('activity'); onSubNavigate('gym'); }} className="bg-slate-950/50 p-3 rounded-xl border-l-4 border-cyan-500 cursor-pointer hover:bg-slate-800 transition-colors">
                     <div className="font-bold text-sm text-white">{g.workoutName}</div>
                     <div className="text-[10px] text-slate-400 mt-0.5">{g.exercises.map(e => e.exercise).join(', ')}</div>
                   </div>
@@ -545,10 +545,10 @@
                   const color = c.type === 'run' ? 'border-emerald-500' : c.type === 'cycle' ? 'border-amber-500' : 'border-blue-500';
                   const icon = c.type === 'run' ? '🏃' : c.type === 'cycle' ? '🚴' : '🏊';
                   return (
-                    <div key={c.id} className={`bg-slate-950/50 p-3 rounded-xl border-l-4 ${color} flex justify-between items-center`}>
+                    <div key={c.id} onClick={() => { onNavigate('activity'); onSubNavigate('cardio'); }} className={`bg-slate-950/50 p-3 rounded-xl border-l-4 ${color} flex justify-between items-center cursor-pointer hover:bg-slate-800 transition-colors`}>
                       <div>
                         <div className="font-bold text-sm text-white capitalize">{icon} {c.type}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">{c.time} mins</div>
+                        <div className="text-sm text-slate-400 mt-0.5">{c.time} mins</div>
                       </div>
                       <div className="text-sm font-black text-slate-200">{c.distance}km</div>
                     </div>
@@ -822,7 +822,7 @@
       );
     };
 
-    const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setStats, selectedDate, onSelectDate }) => {
+    const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setStats, selectedDate, onSelectDate, gymLogs, initialData, onSave }) => {
       const [selected, setSelected] = useState(workouts[0]);
       const [logData, setLogData] = useState({});
       const [newExercise, setNewExercise] = useState('');
@@ -905,17 +905,65 @@
 
           setLogData({});
           showToast('Workout logged & stats updated!', 'success');
+          if (onSave) onSave(); // Navigate back
         } catch (e) {
           showToast('Logging failed. Check Security Rules.', 'error');
           console.error("Firestore Error:", e);
         }
       };
 
+      const deleteLog = async () => {
+        if (!initialData || !confirm('Delete this workout?')) return;
+        try {
+          await DB.collection('users').doc(userId).collection('gym_logs').doc(initialData.id).delete();
+          showToast('Workout deleted.', 'success');
+          if (onSave) onSave();
+        } catch (e) {
+          showToast('Delete failed.', 'error');
+        }
+      };
+
       const isToday = selectedDate === getLocalISODate();
       const dateDisplay = isToday ? 'Today' : new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
+      // If viewing details (editing)
+      if (initialData) {
+        return (
+          <div className="space-y-6 pb-24">
+            <div className="flex items-center justify-between relative">
+              <h2 className="text-2xl font-bold text-white">{dateDisplay}</h2>
+              <button onClick={deleteLog} className="text-red-500 bg-red-500/10 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-500 hover:text-white transition-colors">
+                Delete
+              </button>
+            </div>
+
+            <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 border border-slate-700">
+              <h2 className="text-3xl font-black text-white mb-6">{initialData.workoutName}</h2>
+              <div className="space-y-6">
+                {initialData.exercises.map((ex, idx) => (
+                  <div key={idx} className="border-b border-slate-800 pb-4 last:border-0">
+                    <h3 className="font-bold text-xl text-cyan-400 mb-2">{ex.exercise}</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {ex.sets.map((set, sIdx) => (
+                        <div key={sIdx} className="bg-slate-950 px-3 py-1 rounded-lg border border-slate-800 text-sm">
+                          <span className="font-bold text-white">{set.weight}kg</span> <span className="text-slate-500">x</span> <span className="font-bold text-white">{set.reps}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button onClick={onSave} className="w-full py-4 bg-slate-800 rounded-2xl font-bold text-slate-400">
+              Close
+            </button>
+          </div>
+        );
+      }
+
       return (
-        <div className="space-y-6">
+        <div className="space-y-6 pb-24">
           <div className="flex items-center justify-between relative">
             <h2 className="text-2xl font-bold text-white flex items-center gap-2 cursor-pointer hover:text-cyan-400 transition-colors">
               {dateDisplay}
@@ -1014,36 +1062,80 @@
       );
     };
 
-    const CardioTab = ({ isReady, userId, showToast, selectedDate, onSelectDate }) => {
-      const [type, setType] = useState('run');
-      const [distance, setDistance] = useState('');
-      const [time, setTime] = useState('');
+    const CardioTab = ({ isReady, userId, showToast, selectedDate, onSelectDate, initialData, onSave }) => {
+      const [type, setType] = useState(initialData ? initialData.type : 'run');
+      const [distance, setDistance] = useState(initialData ? initialData.distance : '');
+      const [time, setTime] = useState(initialData ? initialData.time : '');
+      const [className, setClassName] = useState(initialData ? initialData.className : '');
+
+      useEffect(() => {
+        if (initialData) {
+          setType(initialData.type);
+          setDistance(initialData.distance);
+          setTime(initialData.time);
+          setClassName(initialData.className || '');
+        } else {
+          setType('run');
+          setDistance('');
+          setTime('');
+          setClassName('');
+        }
+      }, [initialData]);
 
       const logCardio = async () => {
         if (!isReady || !userId) return showToast('Database not ready.', 'error');
-        if (!distance || !time) return showToast('Fill all fields', 'error');
+        if (!time) return showToast('Enter duration', 'error');
+        if (type !== 'class' && !distance) return showToast('Enter distance', 'error');
+        if (type === 'class' && !className) return showToast('Enter class name', 'error');
 
-        const dist = parseFloat(distance);
+        const dist = parseFloat(distance) || 0;
         const timeMin = parseFloat(time);
-        if (isNaN(dist) || isNaN(timeMin) || dist <= 0 || timeMin <= 0) return showToast('Invalid numbers', 'error');
 
-        const calories = type === 'run' ? Math.round(dist * 100) : type === 'cycle' ? Math.round(dist * 40) : type === 'swim' ? Math.round(dist * 60) : 0; // Fixed: added 0 fallback
+        if (isNaN(timeMin) || timeMin <= 0) return showToast('Invalid duration', 'error');
+        if (type !== 'class' && (isNaN(dist) || dist <= 0)) return showToast('Invalid distance', 'error');
 
-        const baseRef = DB.collection('users').doc(userId).collection('cardio_logs');
+        let calories = 0;
+        if (type === 'run') calories = Math.round(dist * 100);
+        else if (type === 'cycle') calories = Math.round(dist * 40);
+        else if (type === 'swim') calories = Math.round(dist * 250);
+        else if (type === 'hike') calories = Math.round(dist * 70);
+        else if (type === 'class') calories = Math.round(timeMin * 8);
+
+        const data = {
+          date: selectedDate,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          type,
+          distance: dist,
+          time: timeMin,
+          calories,
+          className: type === 'class' ? className : null
+        };
+
         try {
-          await baseRef.add({
-            date: selectedDate,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-            type,
-            distance: dist,
-            time: timeMin,
-            calories
-          });
-          setDistance(''); setTime('');
-          showToast('Cardio logged!', 'success');
+          if (initialData) {
+            await DB.collection('users').doc(userId).collection('cardio_logs').doc(initialData.id).update(data);
+            showToast('Activity updated!', 'success');
+            if (onSave) onSave();
+          } else {
+            await DB.collection('users').doc(userId).collection('cardio_logs').add(data);
+            setDistance(''); setTime(''); setClassName('');
+            showToast('Cardio logged!', 'success');
+            if (onSave) onSave();
+          }
         } catch (e) {
           showToast('Logging failed. Check Security Rules.', 'error');
           console.error("Firestore Error:", e);
+        }
+      };
+
+      const deleteLog = async () => {
+        if (!initialData || !confirm('Delete this entry?')) return;
+        try {
+          await DB.collection('users').doc(userId).collection('cardio_logs').doc(initialData.id).delete();
+          showToast('Entry deleted.', 'success');
+          if (onSave) onSave();
+        } catch (e) {
+          showToast('Delete failed.', 'error');
         }
       };
 
@@ -1051,7 +1143,133 @@
       const dateDisplay = isToday ? 'Today' : new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
       return (
-        <div className="space-y-8">
+        <div className="space-y-8 pb-24">
+          <div className="flex items-center justify-between relative">
+            <h2 className="text-2xl font-bold text-white flex items-center gap-2 cursor-pointer hover:text-cyan-400 transition-colors">
+              {dateDisplay}
+              <svg className="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => onSelectDate(e.target.value)}
+                className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+              />
+            </h2>
+            {initialData && (
+              <button onClick={deleteLog} className="text-red-500 bg-red-500/10 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-500 hover:text-white transition-colors">
+                Delete
+              </button>
+            )}
+          </div>
+          <div className="bg-gradient-to-br from-orange-600 to-pink-600 rounded-3xl p-8 text-center">
+            <h2 className="text-4xl font-black mb-2">{initialData ? 'Edit Cardio' : 'Cardio'}</h2>
+            <p className="text-white/80">{initialData ? 'Update your session details' : 'Log your runs, rides, swims, hikes...'}</p>
+          </div>
+
+          <div className="space-y-6">
+            <select value={type} onChange={e => setType(e.target.value)} className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-lg font-bold border border-slate-700">
+              <option value="run">Running</option>
+              <option value="cycle">Cycling</option>
+              <option value="swim">Swimming</option>
+              <option value="hike">Hiking</option>
+              <option value="class">Class (Yoga, Pilates, etc.)</option>
+            </select>
+
+            {type === 'class' ? (
+              <input type="text" placeholder="Class Name (e.g. Yoga)" value={className} onChange={e => setClassName(e.target.value)}
+                className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-lg font-bold border border-slate-700" />
+            ) : (
+              <input type="number" placeholder="Distance (km)" value={distance} onChange={e => setDistance(e.target.value)}
+                className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-lg font-bold border border-slate-700" />
+            )}
+
+
+            <input type="number" placeholder="Time (minutes)" value={time} onChange={e => setTime(e.target.value)}
+              className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-2xl font-bold text-center" />
+
+            <div className="flex gap-3">
+              {initialData && (
+                <button onClick={onSave} className="flex-1 py-6 bg-slate-800 rounded-2xl font-black text-2xl text-slate-400">
+                  Cancel
+                </button>
+              )}
+              <button onClick={logCardio} className="flex-1 py-6 bg-gradient-to-r from-orange-600 to-pink-600 rounded-2xl font-black text-2xl">
+                {initialData ? 'Save Changes' : 'Log Cardio'}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // --- ACTIVITY TAB (HUB) ---
+    const ActivityTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setStats, selectedDate, onSelectDate, subTab, setSubTab, cardioLogs, gymLogs }) => {
+      const [editingLog, setEditingLog] = useState(null);
+
+      // Filter logs for selected date
+      const todaysGym = (gymLogs || []).filter(g => g.date === selectedDate);
+      const todaysCardio = (cardioLogs || []).filter(c => c.date === selectedDate);
+      const hasActivity = todaysGym.length > 0 || todaysCardio.length > 0;
+
+      const handleBack = () => {
+        setSubTab('list');
+        setEditingLog(null);
+      };
+
+      if (subTab === 'gym') {
+        return (
+          <div className="animate-in fade-in">
+            <button onClick={handleBack} className="mb-4 flex items-center gap-2 text-slate-400 hover:text-white transition-colors font-bold">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+              Back to Activity
+            </button>
+            <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} stats={stats} setStats={setStats} selectedDate={selectedDate} onSelectDate={onSelectDate} gymLogs={gymLogs} initialData={editingLog} onSave={handleBack} />
+          </div>
+        );
+      }
+
+      if (subTab === 'cardio') {
+        return (
+          <div className="animate-in fade-in">
+            <button onClick={handleBack} className="mb-4 flex items-center gap-2 text-slate-400 hover:text-white transition-colors font-bold">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+              Back to Activity
+            </button>
+            <CardioTab key={editingLog ? editingLog.id : 'new'} isReady={isReady} userId={userId} showToast={showToast} selectedDate={selectedDate} onSelectDate={onSelectDate} cardioLogs={cardioLogs} initialData={editingLog} onSave={handleBack} />
+          </div>
+        );
+      }
+
+      if (subTab === 'menu') {
+        return (
+          <div className="animate-in fade-in">
+            <button onClick={handleBack} className="mb-4 flex items-center gap-2 text-slate-400 hover:text-white transition-colors font-bold">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+              Cancel
+            </button>
+            <div className="grid grid-cols-1 gap-6">
+              <button onClick={() => setSubTab('gym')} className="bg-slate-900/80 backdrop-blur-xl border border-slate-700 p-8 rounded-3xl flex flex-col items-center gap-4 hover:bg-slate-800 transition-all hover:scale-[1.02] group">
+                <div className="text-6xl group-hover:scale-110 transition-transform">🏋️</div>
+                <div className="text-2xl font-black text-white">GYM WORKOUT</div>
+                <div className="text-slate-500 text-sm font-bold">Lift weights, track sets & reps</div>
+              </button>
+
+              <button onClick={() => setSubTab('cardio')} className="bg-slate-900/80 backdrop-blur-xl border border-slate-700 p-8 rounded-3xl flex flex-col items-center gap-4 hover:bg-slate-800 transition-all hover:scale-[1.02] group">
+                <div className="text-6xl group-hover:scale-110 transition-transform">🏃</div>
+                <div className="text-2xl font-black text-white">CARDIO SESSION</div>
+                <div className="text-slate-500 text-sm font-bold">Run, cycle, swim, hike, classes</div>
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      // Default: LIST View
+      const isToday = selectedDate === getLocalISODate();
+      const dateDisplay = isToday ? 'Today' : new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+      return (
+        <div className="space-y-6 animate-in fade-in pb-24 relative min-h-[50vh]">
           <div className="flex items-center justify-between relative">
             <h2 className="text-2xl font-bold text-white flex items-center gap-2 cursor-pointer hover:text-cyan-400 transition-colors">
               {dateDisplay}
@@ -1064,29 +1282,53 @@
               />
             </h2>
           </div>
-          <div className="bg-gradient-to-br from-orange-600 to-pink-600 rounded-3xl p-8 text-center">
-            <h2 className="text-4xl font-black mb-2">Cardio</h2>
-            <p className="text-white/80">Log your runs, rides, swims...</p>
+
+          {!hasActivity && (
+            <div className="text-center py-12 text-slate-500">
+              <div className="text-6xl mb-4 grayscale opacity-30">👟</div>
+              <p className="text-lg font-bold">No activity recorded.</p>
+              <p className="text-sm">Get moving and log your workout!</p>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {todaysGym.map(g => (
+              <div key={g.id} onClick={() => { setEditingLog(g); setSubTab('gym'); }} className="bg-slate-900/80 backdrop-blur-xl p-5 rounded-2xl border-l-4 border-cyan-500 cursor-pointer hover:bg-slate-800 transition-all hover:scale-[1.01] group shadow-lg">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="font-black text-lg text-white group-hover:text-cyan-400 transition-colors">{g.workoutName}</div>
+                    <div className="text-sm text-slate-400 mt-1">{g.exercises.length} Exercises • {g.exercises.reduce((acc, ex) => acc + ex.sets.length, 0)} Sets</div>
+                  </div>
+                  <div className="bg-slate-950 p-2 rounded-lg text-2xl">🏋️</div>
+                </div>
+              </div>
+            ))}
+
+            {todaysCardio.map(c => {
+              const color = c.type === 'run' ? 'border-emerald-500' : c.type === 'cycle' ? 'border-amber-500' : 'border-blue-500';
+              const icon = c.type === 'run' ? '🏃' : c.type === 'cycle' ? '🚴' : '🏊';
+              return (
+                <div key={c.id} onClick={() => { setEditingLog(c); setSubTab('cardio'); }} className={`bg-slate-900/80 backdrop-blur-xl p-5 rounded-2xl border-l-4 ${color} cursor-pointer hover:bg-slate-800 transition-all hover:scale-[1.01] group shadow-lg`}>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="font-black text-lg text-white capitalize group-hover:text-cyan-400 transition-colors flex items-center gap-2">
+                        {c.type === 'class' ? c.className : c.type}
+                      </div>
+                      <div className="text-sm text-slate-400 mt-1">{c.time} mins • {c.calories} cals</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-black text-white">{c.distance > 0 ? c.distance : ''}<span className="text-sm text-slate-500 font-bold ml-1">{c.distance > 0 ? 'km' : ''}</span></div>
+                      <div className="text-2xl">{icon}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          <div className="space-y-6">
-            <select value={type} onChange={e => setType(e.target.value)} className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-lg font-bold">
-              <option value="run">Running</option>
-              <option value="cycle">Cycling</option>
-              <option value="swim">Swimming</option>
-              <option value="other">Other</option>
-            </select>
-
-            <input type="number" placeholder="Distance (km)" value={distance} onChange={e => setDistance(e.target.value)}
-              className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-2xl font-bold text-center" />
-
-            <input type="number" placeholder="Time (minutes)" value={time} onChange={e => setTime(e.target.value)}
-              className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-2xl font-bold text-center" />
-
-            <button onClick={logCardio} className="w-full py-6 bg-gradient-to-r from-orange-600 to-pink-600 rounded-2xl font-black text-2xl">
-              Log Cardio
-            </button>
-          </div>
+          <button onClick={() => setSubTab('menu')} className="fixed bottom-24 right-6 bg-gradient-to-r from-cyan-500 to-blue-600 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-3xl font-light hover:scale-110 transition-transform z-50">
+            ＋
+          </button>
         </div>
       );
     };
@@ -1094,25 +1336,33 @@
     const FloatingMenu = ({ tab, setTab }) => {
       const [isOpen, setIsOpen] = useState(false);
 
-      const toggleMenu = () => setIsOpen(!isOpen);
-      const selectTab = (t) => {
-        setTab(t);
-        setIsOpen(false);
-      };
+      const menuItems = [
+        { id: 'summary', label: 'Summary', icon: '📊' },
+        { id: 'food', label: 'Food', icon: '🍎' },
+        { id: 'activity', label: 'Activity', icon: '⚡' },
+      ];
 
       return (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
-          {/* Expanded Menu Options */}
-          <div className={`flex flex-col gap-2 transition-all duration-300 origin-bottom-right ${isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-90 translate-y-10 pointer-events-none'}`}>
-            <button onClick={() => selectTab('summary')} className={`px-6 py-3 rounded-full font-bold text-sm shadow-xl backdrop-blur-xl border border-slate-700 transition-colors ${tab === 'summary' ? 'bg-cyan-600 text-white' : 'bg-slate-900/90 text-slate-400 hover:text-white'}`}>Summary</button>
-            <button onClick={() => selectTab('food')} className={`px-6 py-3 rounded-full font-bold text-sm shadow-xl backdrop-blur-xl border border-slate-700 transition-colors ${tab === 'food' ? 'bg-emerald-600 text-white' : 'bg-slate-900/90 text-slate-400 hover:text-white'}`}>Food</button>
-            <button onClick={() => selectTab('gym')} className={`px-6 py-3 rounded-full font-bold text-sm shadow-xl backdrop-blur-xl border border-slate-700 transition-colors ${tab === 'gym' ? 'bg-pink-600 text-white' : 'bg-slate-900/90 text-slate-400 hover:text-white'}`}>Gym</button>
-            <button onClick={() => selectTab('cardio')} className={`px-6 py-3 rounded-full font-bold text-sm shadow-xl backdrop-blur-xl border border-slate-700 transition-colors ${tab === 'cardio' ? 'bg-orange-600 text-white' : 'bg-slate-900/90 text-slate-400 hover:text-white'}`}>Cardio</button>
-          </div>
-
-          {/* Main Toggle Button */}
-          <button onClick={toggleMenu} className={`w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 ${isOpen ? 'bg-slate-800 rotate-45' : 'bg-gradient-to-br from-cyan-500 to-blue-600 hover:scale-105'}`}>
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+        <div className="fixed bottom-6 right-6 z-[60] flex flex-col items-end gap-3">
+          {isOpen && (
+            <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-4">
+              {menuItems.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => { setTab(item.id); setIsOpen(false); }}
+                  className={`flex items-center gap-3 px-5 py-3 rounded-full shadow-lg backdrop-blur-md border transition-all ${tab === item.id ? 'bg-cyan-500 text-white border-cyan-400' : 'bg-slate-900/90 text-slate-300 border-slate-700 hover:bg-slate-800'}`}
+                >
+                  <span className="text-xl">{item.icon}</span>
+                  <span className="font-bold">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            className={`w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-3xl transition-transform ${isOpen ? 'rotate-45 bg-slate-800 text-white' : 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white hover:scale-105'}`}
+          >
+            {isOpen ? '＋' : '☰'}
           </button>
         </div>
       );
@@ -1120,6 +1370,7 @@
 
     const App = () => {
       const [tab, setTab] = useState('summary');
+      const [activitySubTab, setActivitySubTab] = useState('list'); // Changed default to 'list'
       const [selectedDate, setSelectedDate] = useState(getLocalISODate());
       const [calendarView, setCalendarView] = useState('week');
       const [foodLog, setFoodLog] = useState([]);
@@ -1393,28 +1644,29 @@
           {/* MAIN UI (BLOCKED IF NOT LOGGED IN) */}
           <div className={!isAppUsable ? 'opacity-20 pointer-events-none' : ''}>
             <div className="flex justify-between items-center mb-8">
-              <h1 className="text-5xl font-black">{tab === 'food' ? 'FOOD' : tab === 'gym' ? 'GYM' : tab === 'cardio' ? 'CARDIO' : 'SUMMARY'}</h1>
+              <h1 className="text-5xl font-black">{tab === 'food' ? 'FOOD' : tab === 'activity' ? 'ACTIVITY' : 'SUMMARY'}</h1>
 
               <div className="flex items-center space-x-3">
                 {isLoggedIn && (
                   <button onClick={handleLogout} className="p-2 bg-slate-800 rounded-full text-red-400 hover:bg-slate-700 text-sm">
-                    Logout
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
                   </button>
                 )}
-                <button onClick={() => setShowSettings(true)} className="p-3 bg-slate-800 rounded-full">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                <button onClick={() => setShowSettings(true)} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-colors">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                 </button>
               </div>
             </div>
 
-            {tab === 'summary' && <SummaryTab data={activeDayData} allFood={foodLog} allGym={gymLog} allCardio={cardioLog} selectedDate={selectedDate} onSelectDate={setSelectedDate} calendarView={calendarView} />}
-            {tab === 'food' && <FoodTab data={activeDayData} isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={!!cloudConfig} selectedDate={selectedDate} onSelectDate={setSelectedDate} />}
-            {tab === 'gym' && <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} stats={stats} setStats={setStats} selectedDate={selectedDate} onSelectDate={setSelectedDate} />}
-            {tab === 'cardio' && <CardioTab isReady={isReady} userId={userId} showToast={showToast} selectedDate={selectedDate} onSelectDate={setSelectedDate} />}
+            <div className="pb-24">
+              {tab === 'summary' && <SummaryTab data={activeDayData} allFood={foodLog} allGym={gymLog} allCardio={cardioLog} selectedDate={selectedDate} onSelectDate={setSelectedDate} calendarView={calendarView} onNavigate={setTab} onSubNavigate={setActivitySubTab} />}
+              {tab === 'food' && <FoodTab data={activeDayData} isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={isConfigLoaded} selectedDate={selectedDate} onSelectDate={setSelectedDate} />}
+              {tab === 'activity' && <ActivityTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} stats={stats} setStats={setStats} selectedDate={selectedDate} onSelectDate={setSelectedDate} subTab={activitySubTab} setSubTab={setActivitySubTab} cardioLogs={cardioLog} gymLogs={gymLog} />}
+            </div>
+
+
+            <FloatingMenu tab={tab} setTab={setTab} />
           </div>
-
-
-          <FloatingMenu tab={tab} setTab={setTab} />
         </div>
       );
     };
