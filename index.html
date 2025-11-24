@@ -737,6 +737,32 @@
         }
       };
 
+      const adjustQuantity = async (item, delta) => {
+        if (!isReady || !userId) return showToast('Database not ready.', 'error');
+
+        const currentQty = item.quantity || 1;
+        const newQty = Math.max(0.5, currentQty + delta); // Minimum 0.5
+
+        if (newQty === currentQty) return;
+
+        // Calculate base values (per unit)
+        const baseCals = (item.cals || 0) / currentQty;
+        const baseProt = (item.prot || 0) / currentQty;
+        const baseCarb = (item.carb || 0) / currentQty;
+        const baseFat = (item.fat || 0) / currentQty;
+
+        const updatedItem = {
+          ...item,
+          quantity: newQty,
+          cals: Math.round(baseCals * newQty),
+          prot: Math.round(baseProt * newQty),
+          carb: Math.round(baseCarb * newQty),
+          fat: Math.round(baseFat * newQty)
+        };
+
+        await updateFoodItem(updatedItem);
+      };
+
       const isToday = selectedDate === getLocalISODate();
       const dateDisplay = isToday ? 'Today' : new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
@@ -774,12 +800,16 @@
                       <div>
                         <div className="font-bold flex items-center gap-2">
                           {item.name}
-                          {item.quantity && item.quantity > 1 && <span className="text-xs bg-slate-700 px-2 py-0.5 rounded-full text-slate-300">x{item.quantity}</span>}
                         </div>
                         <div className="text-sm text-slate-500">{item.prot}g P • {item.carb}g C • {item.fat}g F</div>
                       </div>
                       <div className="text-right flex items-center gap-4">
-                        <div className="text-2xl font-black text-emerald-400">{item.cals}</div>
+                        <div className="flex items-center gap-2 bg-slate-950 rounded-lg p-1 border border-slate-800" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => adjustQuantity(item, -0.5)} className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 rounded">-</button>
+                          <span className="text-xs font-bold text-slate-300 w-4 text-center">{item.quantity || 1}</span>
+                          <button onClick={() => adjustQuantity(item, 0.5)} className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 rounded">+</button>
+                        </div>
+                        <div className="text-2xl font-black text-emerald-400 w-16 text-right">{item.cals}</div>
                         <button onClick={(e) => { e.stopPropagation(); deleteFoodItem(item.id); }} className="text-red-500 text-lg hover:text-red-400 transition-colors">×</button>
                       </div>
                     </div>
