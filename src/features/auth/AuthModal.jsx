@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getFirebaseAuth } from '../../services/firebase';
+import { auth } from '../../services/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 
 const AuthModal = ({ showToast }) => {
@@ -10,7 +10,7 @@ const AuthModal = ({ showToast }) => {
 
     const handleAuth = async () => {
         setError('');
-        const auth = getFirebaseAuth();
+        // const auth = getFirebaseAuth(); // Removed, using imported auth
         try {
             if (isLogin) {
                 await signInWithEmailAndPassword(auth, email, password);

@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 // Hardcoded config (as per original file)
 export const FIREBASE_CONFIG = {
@@ -12,25 +12,7 @@ export const FIREBASE_CONFIG = {
     appId: "1:389279862799:web:11413867664687d603d730"
 };
 
-let app;
-let db;
-let auth;
-
-export const initializeFirebase = () => {
-    if (!app) {
-        app = initializeApp(FIREBASE_CONFIG);
-        db = getFirestore(app);
-        auth = getAuth(app);
-    }
-    return { app, db, auth };
-};
-
-export const getDb = () => {
-    if (!db) initializeFirebase();
-    return db;
-};
-
-export const getFirebaseAuth = () => {
-    if (!auth) initializeFirebase();
-    return auth;
-};
+const app = initializeApp(FIREBASE_CONFIG);
+export const db = getFirestore(app);
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
