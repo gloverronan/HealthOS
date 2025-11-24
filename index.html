@@ -878,8 +878,8 @@
 
       const loadLastSession = async (workoutId) => {
         if (!isReady) return;
+
         try {
-          // Find the last log for this workout type
           const snapshot = await DB.collection('users').doc(userId).collection('gym_logs')
             .where('workoutId', '==', workoutId)
             .orderBy('timestamp', 'desc')
@@ -888,35 +888,41 @@
 
           if (!snapshot.empty) {
             const lastLog = snapshot.docs[0].data();
-            // Preload exercises from the last session
-            const exercisesToLoad = lastLog.exercises.map(e => e.exercise);
+            // Filter out skipped exercises from the last session
+            const exercisesToLoad = Object.keys(lastLog.exercises || {}).filter(ex => {
+              // Check if it was skipped in the last session (if we tracked that)
+              // For now, just load all that have data
+              return true;
+            });
 
-            // Initialize empty sets for these exercises
+            // Reconstruct logData structure
             const newLogData = {};
             exercisesToLoad.forEach(ex => {
-              newLogData[ex] = {
-                [Date.now() + Math.random()]: { w: '', r: '' },
-                [Date.now() + Math.random()]: { w: '', r: '' },
-                [Date.now() + Math.random()]: { w: '', r: '' }
-              };
+              newLogData[ex] = lastLog.exercises[ex];
             });
             setLogData(newLogData);
           } else {
-            // Fallback to default list if no history
-            const defaultExercises = selected.exercises || [];
-            const newLogData = {};
-            defaultExercises.forEach(ex => {
-              const name = typeof ex === 'string' ? ex : ex.name;
-              newLogData[name] = {
-                [Date.now() + Math.random()]: { w: '', r: '' },
-                [Date.now() + Math.random()]: { w: '', r: '' },
-                [Date.now() + Math.random()]: { w: '', r: '' }
-              };
-            });
-            setLogData(newLogData);
+            throw new Error("No history");
           }
         } catch (e) {
-          console.error("Error loading history:", e);
+          console.log("History load error (or no history):", e);
+          if (e.code === 'failed-precondition') {
+            console.warn("Missing Index. Please create it:", e.message);
+            // Optional: showToast("Dev: Missing Index. Check Console.", "error");
+          }
+
+          // Fallback to default list
+          const defaultExercises = selected.exercises || [];
+          const newLogData = {};
+          defaultExercises.forEach(ex => {
+            const name = typeof ex === 'string' ? ex : ex.name;
+            newLogData[name] = {
+              [Date.now() + Math.random()]: { w: '', r: '' },
+              [Date.now() + Math.random()]: { w: '', r: '' },
+              [Date.now() + Math.random()]: { w: '', r: '' }
+            };
+          });
+          setLogData(newLogData);
         }
       };
 
@@ -1518,11 +1524,23 @@
       const [cardioLog, setCardioLog] = useState([]);
       const [workouts, setWorkouts] = useState(() => {
         const loaded = loadItem('hos_workouts', DEFAULT_WORKOUTS);
-        // Migration: If exercises are strings, convert to objects
-        return loaded.map(w => ({
-          ...w,
-          exercises: w.exercises.map(ex => typeof ex === 'string' ? { name: ex, bodyweight: false } : ex)
-        }));
+        // Merge with defaults to ensure new fields (emojis) are present
+        return loaded.map(w => {
+          const def = DEFAULT_WORKOUTS.find(d => d.id === w.id);
+          if (def) {
+            return {
+              ...def, // Base on new default (has emoji)
+              ...w,   // Overlay saved data (has old exercises)
+              emoji: w.emoji || def.emoji, // Ensure emoji exists
+              exercises: w.exercises.map(ex => typeof ex === 'string' ? { name: ex, bodyweight: false } : ex)
+            };
+          }
+          // Custom workout
+          return {
+            ...w,
+            exercises: w.exercises.map(ex => typeof ex === 'string' ? { name: ex, bodyweight: false } : ex)
+          };
+        });
       });
       const [exerciseSettings, setExerciseSettings] = useState({}); // New state for exercise metadata
       const [editingLog, setEditingLog] = useState(null); // Lifted state for activity editing
