@@ -4,7 +4,7 @@ const FloatingMenu = ({ tab, setTab }) => {
     const [isOpen, setIsOpen] = useState(false);
 
     const menuItems = [
-        { id: 'summary', label: 'Summary', icon: '📊' },
+        { id: 'summary', label: 'Home', icon: '📊' },
         { id: 'food', label: 'Food', icon: '🍎' },
         { id: 'activity', label: 'Activity', icon: '⚡' },
     ];

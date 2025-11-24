@@ -3,7 +3,7 @@ import { getLocalISODate } from '../../utils/dateUtils';
 import GymTab from '../gym/GymTab';
 import CardioTab from '../cardio/CardioTab';
 
-const ActivityTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setStats, selectedDate, onSelectDate, subTab, setSubTab, cardioLogs, gymLogs, editingLog, setEditingLog, exerciseSettings, setExerciseSettings }) => {
+const ActivityTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setStats, selectedDate, onSelectDate, subTab, setSubTab, cardioLogs, gymLogs, editingLog, setEditingLog, exerciseSettings, setExerciseSettings, exerciseLibrary, setExerciseLibrary }) => {
     // Filter logs for selected date
     const todaysGym = (gymLogs || []).filter(g => g.date === selectedDate);
     const todaysCardio = (cardioLogs || []).filter(c => c.date === selectedDate);
@@ -21,7 +21,7 @@ const ActivityTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats,
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
                     Back to Activity
                 </button>
-                <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} stats={stats} setStats={setStats} selectedDate={selectedDate} onSelectDate={onSelectDate} gymLogs={gymLogs} initialData={editingLog} onSave={handleBack} exerciseSettings={exerciseSettings} setExerciseSettings={setExerciseSettings} />
+                <GymTab workouts={workouts} setWorkouts={setWorkouts} isReady={isReady} userId={userId} showToast={showToast} stats={stats} setStats={setStats} selectedDate={selectedDate} onSelectDate={onSelectDate} gymLogs={gymLogs} initialData={editingLog} onSave={handleBack} exerciseSettings={exerciseSettings} setExerciseSettings={setExerciseSettings} exerciseLibrary={exerciseLibrary} setExerciseLibrary={setExerciseLibrary} />
             </div>
         );
     }
@@ -103,8 +103,13 @@ const ActivityTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats,
                 ))}
 
                 {todaysCardio.map(c => {
-                    const color = c.type === 'run' ? 'border-emerald-500' : c.type === 'cycle' ? 'border-amber-500' : 'border-blue-500';
-                    const icon = c.type === 'run' ? '🏃' : c.type === 'cycle' ? '🚴' : '🏊';
+                    const color = c.type === 'run' ? 'border-emerald-500' : c.type === 'cycle' ? 'border-amber-500' : c.type === 'swim' ? 'border-blue-500' : 'border-slate-500';
+                    let icon = '🏃';
+                    if (c.type === 'cycle') icon = '🚴';
+                    if (c.type === 'swim') icon = '🏊';
+                    if (c.type === 'walk') icon = '🚶';
+                    if (c.type === 'hike') icon = '🥾';
+                    if (c.type === 'class') icon = '🧘';
                     return (
                         <div key={c.id} onClick={() => { setEditingLog(c); setSubTab('cardio'); }} className={`bg-slate-900/80 backdrop-blur-xl p-5 rounded-2xl border-l-4 ${color} cursor-pointer hover:bg-slate-800 transition-all hover:scale-[1.01] group shadow-lg`}>
                             <div className="flex justify-between items-center">

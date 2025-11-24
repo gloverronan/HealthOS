@@ -7,11 +7,11 @@ const Ring = ({ r, progress, color }) => {
     return <circle cx="128" cy="128" r={r} stroke={color} strokeWidth="14" fill="none" strokeDasharray={circum} strokeDashoffset={circum - dash} strokeLinecap="round" transform="rotate(-90 128 128)" className="transition-all duration-1000" style={{ filter: `drop-shadow(0 0 8px ${color})` }} />;
 };
 
-const ActivityRings = ({ cals, prot, carb, fat, goals, scale = 1 }) => {
+const ActivityRings = ({ cals, prot, carb, fat, goals, scale = 1, showLegend = true }) => {
     const pct = (v, g) => Math.min(100, (v / g) * 100);
 
     return (
-        <div className="flex flex-col items-center mb-8" style={{ transform: `scale(${scale})` }}>
+        <div className="flex flex-col items-center" style={{ transform: `scale(${scale})` }}>
             <div className="relative w-64 h-64">
                 <svg viewBox="0 0 256 256">
                     {/* Background Rings */}
@@ -29,7 +29,7 @@ const ActivityRings = ({ cals, prot, carb, fat, goals, scale = 1 }) => {
             </div>
 
             {/* Legend */}
-            <NutrientLegend cals={cals} prot={prot} carb={carb} fat={fat} goals={goals} />
+            {showLegend && <NutrientLegend cals={cals} prot={prot} carb={carb} fat={fat} goals={goals} />}
         </div>
     );
 };

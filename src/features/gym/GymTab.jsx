@@ -2,15 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebase';
 import { collection, doc, getDocs, query, where, orderBy, limit, setDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { getLocalISODate } from '../../utils/dateUtils';
+import { renameExercise, deleteExercise, addExercise, getExerciseLibrary } from '../../services/exerciseLibrary';
 
-const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setStats, selectedDate, onSelectDate, gymLogs, initialData, onSave, exerciseSettings, setExerciseSettings }) => {
+const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setStats, selectedDate, onSelectDate, gymLogs, initialData, onSave, exerciseSettings, setExerciseSettings, exerciseLibrary, setExerciseLibrary }) => {
     const [selected, setSelected] = useState(null);
     const [logData, setLogData] = useState({});
     const [isAdding, setIsAdding] = useState(false);
     const [newExercise, setNewExercise] = useState('');
     const [newExerciseType, setNewExerciseType] = useState('weighted'); // 'weighted' or 'bodyweight'
-    const [skippedExercises, setSkippedExercises] = useState([]);
+
     const [draggedItem, setDraggedItem] = useState(null);
+    const [editingExercise, setEditingExercise] = useState(null);
+    const [renameValue, setRenameValue] = useState('');
+    const [isRenaming, setIsRenaming] = useState(false);
 
     // --- 1. INITIALIZATION & HISTORY LOADING ---
     useEffect(() => {
@@ -33,18 +37,27 @@ const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setS
 
             if (!snapshot.empty) {
                 const lastLog = snapshot.docs[0].data();
-                // Filter out skipped exercises from the last session
-                const exercisesToLoad = Object.keys(lastLog.exercises || {}).filter(ex => {
-                    // Check if it was skipped in the last session (if we tracked that)
-                    // For now, just load all that have data
-                    return true;
+
+                // Reconstruct logData structure from exercises array
+                const newLogData = {};
+                const exercises = lastLog.exercises || [];
+
+                exercises.forEach(ex => {
+                    const exerciseName = ex.exercise;
+                    const sets = ex.sets || [];
+
+                    // Convert sets array to object keyed by timestamps
+                    const setsObj = {};
+                    sets.forEach((set, idx) => {
+                        setsObj[Date.now() + idx] = {
+                            w: set.weight || '',
+                            r: set.reps || ''
+                        };
+                    });
+
+                    newLogData[exerciseName] = setsObj;
                 });
 
-                // Reconstruct logData structure
-                const newLogData = {};
-                exercisesToLoad.forEach(ex => {
-                    newLogData[ex] = lastLog.exercises[ex];
-                });
                 setLogData(newLogData);
             } else {
                 throw new Error("No history");
@@ -101,31 +114,113 @@ const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setS
         setDraggedItem(null);
     };
 
+    const handleRename = async (oldName) => {
+        if (!renameValue.trim() || renameValue === oldName) {
+            setEditingExercise(null);
+            return;
+        }
+
+        const newName = renameValue.trim();
+
+        // Prevent duplicates
+        if (logData[newName]) {
+            showToast('Exercise name already exists in this session', 'error');
+            return;
+        }
+
+        // Check if name exists in library
+        if (exerciseLibrary.some(ex => ex.name === newName && ex.name !== oldName)) {
+            showToast('Exercise name already exists in library', 'error');
+            return;
+        }
+
+        setIsRenaming(true);
+        try {
+            // Call service to rename and propagate
+            await renameExercise(userId, oldName, newName);
+
+            // Update local logData
+            const newLogData = {};
+            Object.keys(logData).forEach(key => {
+                if (key === oldName) {
+                    newLogData[newName] = logData[key];
+                } else {
+                    newLogData[key] = logData[key];
+                }
+            });
+            setLogData(newLogData);
+
+            // Reload exercise library
+            const updatedLibrary = await getExerciseLibrary(userId);
+            setExerciseLibrary(updatedLibrary);
+
+            showToast('Exercise renamed!', 'success');
+        } catch (e) {
+            console.error('Rename error:', e);
+            showToast('Failed to rename exercise', 'error');
+        }
+        setIsRenaming(false);
+        setEditingExercise(null);
+    };
+
+    const handleDeleteExercise = async (exerciseName) => {
+        if (!confirm(`Delete "${exerciseName}" from your exercise library?\n\nThis will not delete historical workout logs.`)) {
+            return;
+        }
+
+        try {
+            await deleteExercise(userId, exerciseName);
+
+            // Reload exercise library
+            const updatedLibrary = await getExerciseLibrary(userId);
+            setExerciseLibrary(updatedLibrary);
+
+            showToast('Exercise deleted from library', 'success');
+        } catch (e) {
+            console.error('Delete error:', e);
+            showToast('Failed to delete exercise', 'error');
+        }
+    };
+
     // --- 3. EXERCISE MANAGEMENT ---
     const handleAddExercise = async () => {
         if (!newExercise) return;
 
-        // Add to current session
-        setLogData(prev => ({
-            ...prev,
-            [newExercise]: {
-                [Date.now()]: { w: '', r: '' },
-                [Date.now() + 1]: { w: '', r: '' },
-                [Date.now() + 2]: { w: '', r: '' }
+        try {
+            // Add to exercise library if it doesn't exist
+            if (!exerciseLibrary.some(ex => ex.name === newExercise)) {
+                await addExercise(userId, newExercise, newExerciseType);
+
+                // Reload library
+                const updatedLibrary = await getExerciseLibrary(userId);
+                setExerciseLibrary(updatedLibrary);
             }
-        }));
 
-        // Save metadata if new
-        if (!exerciseSettings?.[newExercise]) {
-            const newSettings = { ...exerciseSettings, [newExercise]: { type: newExerciseType } };
-            setExerciseSettings(newSettings);
-            try {
-                await setDoc(doc(db, 'users', userId, 'settings', 'exercises'), newSettings, { merge: true });
-            } catch (e) { console.error("Failed to save exercise settings", e); }
+            // Add to current session
+            setLogData(prev => ({
+                ...prev,
+                [newExercise]: {
+                    [Date.now()]: { w: '', r: '' },
+                    [Date.now() + 1]: { w: '', r: '' },
+                    [Date.now() + 2]: { w: '', r: '' }
+                }
+            }));
+
+            // Save metadata if new
+            if (!exerciseSettings?.[newExercise]) {
+                const newSettings = { ...exerciseSettings, [newExercise]: { type: newExerciseType } };
+                setExerciseSettings(newSettings);
+                try {
+                    await setDoc(doc(db, 'users', userId, 'settings', 'exercises'), newSettings, { merge: true });
+                } catch (e) { console.error("Failed to save exercise settings", e); }
+            }
+
+            setNewExercise('');
+            setIsAdding(false);
+        } catch (e) {
+            console.error('Add exercise error:', e);
+            showToast('Failed to add exercise', 'error');
         }
-
-        setNewExercise('');
-        setIsAdding(false);
     };
 
     const finishWorkout = async () => {
@@ -175,11 +270,44 @@ const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setS
     const deleteLog = async () => {
         if (!initialData || !confirm('Delete this workout?')) return;
         try {
+            // Delete the log
             await deleteDoc(doc(db, 'users', userId, 'gym_logs', initialData.id));
-            showToast('Workout deleted.', 'success');
+
+            // Recalculate stats from all remaining logs
+            const logsRef = collection(db, 'users', userId, 'gym_logs');
+            const allLogsSnapshot = await getDocs(logsRef);
+
+            const newStats = {};
+
+            // Go through all remaining logs and find the best performance for each exercise
+            allLogsSnapshot.docs.forEach(logDoc => {
+                const logData = logDoc.data();
+                const exercises = logData.exercises || [];
+
+                exercises.forEach(ex => {
+                    const maxWeight = Math.max(...ex.sets.map(s => Number(s.weight) || 0));
+                    const bestSet = ex.sets.find(s => Number(s.weight) === maxWeight);
+
+                    // If we don't have a record for this exercise yet, or this is better
+                    if (!newStats[ex.exercise] || maxWeight > newStats[ex.exercise].w) {
+                        newStats[ex.exercise] = {
+                            w: maxWeight,
+                            r: bestSet ? bestSet.reps : 0,
+                            date: logData.date
+                        };
+                    }
+                });
+            });
+
+            // Update stats in Firestore
+            await setDoc(doc(db, 'users', userId, 'stats', 'exercises'), newStats);
+            setStats(newStats);
+
+            showToast('Workout deleted and PRs recalculated!', 'success');
             if (onSave) onSave();
         } catch (e) {
             showToast('Delete failed.', 'error');
+            console.error(e);
         }
     };
 
@@ -239,7 +367,7 @@ const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setS
     }
 
     // --- RENDER: ACTIVE SESSION ---
-    const activeExercises = Object.keys(logData).filter(ex => !skippedExercises.includes(ex));
+    const activeExercises = Object.keys(logData);
 
     return (
         <div className="space-y-6 pb-24 animate-in slide-in-from-right">
@@ -265,14 +393,33 @@ const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setS
                         >
                             <div className="flex justify-between items-center mb-4 cursor-move">
                                 <div>
-                                    <h3 className="font-bold text-xl flex items-center gap-2">
-                                        {ex}
-                                        {isBodyweight && <span className="bg-slate-700 text-[10px] px-2 py-0.5 rounded text-slate-300">BW</span>}
-                                    </h3>
-                                    {stats[ex] && <div className="text-xs text-emerald-400 font-bold mt-1">Last: {stats[ex].w}kg x {stats[ex].r}</div>}
+                                    {editingExercise === ex ? (
+                                        <input
+                                            autoFocus
+                                            value={renameValue}
+                                            onChange={e => setRenameValue(e.target.value)}
+                                            onBlur={() => handleRename(ex)}
+                                            onKeyDown={e => e.key === 'Enter' && handleRename(ex)}
+                                            className="bg-slate-950 border border-slate-600 rounded px-2 py-1 text-xl font-bold text-white outline-none focus:border-cyan-500 w-full"
+                                            onClick={e => e.stopPropagation()}
+                                        />
+                                    ) : (
+                                        <h3 className="font-bold text-xl flex items-center gap-2 group/title cursor-pointer" onClick={() => { setEditingExercise(ex); setRenameValue(ex); }}>
+                                            {ex}
+                                            <svg className="w-4 h-4 text-slate-600 group-hover/title:text-slate-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                            {isBodyweight && <span className="bg-slate-700 text-[10px] px-2 py-0.5 rounded text-slate-300">BW</span>}
+                                        </h3>
+                                    )}
+                                    {stats[ex] && <div className="text-xs text-emerald-400 font-bold mt-1">PB: {stats[ex].w}kg x {stats[ex].r}</div>}
                                 </div>
                                 <div className="flex gap-3">
-                                    <button onClick={() => setSkippedExercises(prev => [...prev, ex])} className="text-slate-500 text-sm font-bold hover:text-white">SKIP</button>
+                                    <button onClick={() => {
+                                        if (confirm(`Remove ${ex} from this workout?`)) {
+                                            const newLog = { ...logData };
+                                            delete newLog[ex];
+                                            setLogData(newLog);
+                                        }
+                                    }} className="text-slate-500 text-sm font-bold hover:text-red-500">REMOVE</button>
                                     <button onClick={() => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [Date.now()]: { w: '', r: '' } } }))} className="text-cyan-400 text-sm font-bold">+ ADD SET</button>
                                 </div>
                             </div>
@@ -290,12 +437,12 @@ const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setS
                                         <div className="w-6 text-center text-slate-500 font-bold">{i + 1}</div>
                                         {!isBodyweight ? (
                                             <input key="weight" type="number" placeholder="kg" value={set.w} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [setId]: { ...set, w: e.target.value } } }))}
-                                                className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-center font-bold text-white focus:border-cyan-500 outline-none transition-colors" />
+                                                className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-lg p-2 text-center font-bold text-white focus:border-cyan-500 outline-none transition-colors" />
                                         ) : (
                                             <div className="text-center text-slate-600 font-bold text-sm py-3">BW</div>
                                         )}
                                         <input key="reps" type="number" placeholder="0" value={set.r} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [setId]: { ...set, r: e.target.value } } }))}
-                                            className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-center font-bold text-white focus:border-cyan-500 outline-none transition-colors" />
+                                            className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-lg p-2 text-center font-bold text-white focus:border-cyan-500 outline-none transition-colors" />
                                         <button onClick={() => {
                                             const newSets = { ...logData[ex] };
                                             delete newSets[setId];
@@ -313,41 +460,62 @@ const GymTab = ({ workouts, setWorkouts, isReady, userId, showToast, stats, setS
                 {!isAdding ? (
                     <button onClick={() => setIsAdding(true)} className="w-full py-4 border-2 border-dashed border-slate-700 rounded-2xl text-slate-400 font-bold hover:border-cyan-500 hover:text-cyan-500 transition-colors">+ Add Exercise</button>
                 ) : (
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 animate-in fade-in">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 animate-in fade-in text-left">
                         <h3 className="font-bold text-white mb-4">Add Exercise</h3>
-                        <div className="flex gap-2 mb-4">
-                            <button onClick={() => setNewExerciseType('weighted')} className={`flex-1 py-2 rounded-lg font-bold text-sm ${newExerciseType === 'weighted' ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400'}`}>Weighted</button>
-                            <button onClick={() => setNewExerciseType('bodyweight')} className={`flex-1 py-2 rounded-lg font-bold text-sm ${newExerciseType === 'bodyweight' ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400'}`}>Bodyweight</button>
-                        </div>
-                        <input autoFocus className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 mb-4 text-white" placeholder="Exercise Name (e.g. Bench Press)" value={newExercise} onChange={e => setNewExercise(e.target.value)} />
 
-                        {/* History Suggestions */}
-                        {Object.keys(stats).length > 0 && (
-                            <div className="mb-4 flex flex-wrap gap-2">
-                                {Object.keys(stats).filter(k => k.toLowerCase().includes(newExercise.toLowerCase()) && !activeExercises.includes(k)).slice(0, 5).map(ex => (
-                                    <button key={ex} onClick={() => { setNewExercise(ex); setNewExerciseType(exerciseSettings?.[ex]?.type || 'weighted'); }} className="bg-slate-800 text-xs px-2 py-1 rounded text-slate-300 hover:bg-slate-700 border border-slate-700">{ex}</button>
-                                ))}
-                            </div>
-                        )}
+                        {/* List of exercises from library */}
+                        <div className="mb-4 max-h-48 overflow-y-auto custom-scrollbar space-y-2">
+                            {exerciseLibrary.filter(ex => !logData[ex.name]).map(ex => (
+                                <div key={ex.name} className="flex gap-2">
+                                    <button onClick={() => {
+                                        setLogData(prev => ({
+                                            ...prev,
+                                            [ex.name]: {
+                                                [Date.now()]: { w: '', r: '' },
+                                                [Date.now() + 1]: { w: '', r: '' },
+                                                [Date.now() + 2]: { w: '', r: '' }
+                                            }
+                                        }));
+                                        setIsAdding(false);
+                                    }} className="flex-1 text-left px-4 py-3 bg-slate-950 rounded-xl border border-slate-800 hover:border-cyan-500 text-slate-300 hover:text-white transition-colors flex justify-between items-center">
+                                        <span className="font-bold">{ex.name}</span>
+                                        <span className="text-xs text-slate-500 bg-slate-900 px-2 py-0.5 rounded">{ex.type === 'bodyweight' ? 'BW' : 'Weighted'}</span>
+                                    </button>
+                                    <button onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteExercise(ex.name);
+                                    }} className="w-10 h-auto flex items-center justify-center text-slate-600 hover:text-red-500 transition-colors bg-slate-950 rounded-xl border border-slate-800">
+                                        🗑️
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* New exercise input */}
+                        <div className="flex gap-2 mb-4">
+                            <input
+                                autoFocus
+                                value={newExercise}
+                                onChange={e => setNewExercise(e.target.value)}
+                                placeholder="Or type new exercise..."
+                                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500"
+                                onKeyDown={e => e.key === 'Enter' && handleAddExercise()}
+                            />
+                        </div>
+
+                        {/* Exercise type selector */}
+                        <div className="flex gap-2 mb-4">
+                            <button onClick={() => setNewExerciseType('weighted')} className={`flex-1 py-2 rounded-lg text-sm font-bold border ${newExerciseType === 'weighted' ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400' : 'border-slate-800 text-slate-500'}`}>Weighted</button>
+                            <button onClick={() => setNewExerciseType('bodyweight')} className={`flex-1 py-2 rounded-lg text-sm font-bold border ${newExerciseType === 'bodyweight' ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400' : 'border-slate-800 text-slate-500'}`}>Bodyweight</button>
+                        </div>
 
                         <div className="flex gap-3">
                             <button onClick={() => setIsAdding(false)} className="flex-1 py-3 bg-slate-800 rounded-xl font-bold text-slate-400">Cancel</button>
-                            <button onClick={handleAddExercise} className="flex-1 py-3 bg-cyan-600 rounded-xl font-bold text-white">Add</button>
+                            <button onClick={handleAddExercise} disabled={!newExercise} className="flex-1 py-3 bg-cyan-600 rounded-xl font-bold text-white disabled:opacity-50">Add New</button>
                         </div>
                     </div>
                 )}
             </div>
-
-            {skippedExercises.length > 0 && (
-                <div className="text-center">
-                    <div className="text-xs text-slate-500 uppercase mb-2">Skipped Exercises</div>
-                    <div className="flex flex-wrap justify-center gap-2">
-                        {skippedExercises.map(ex => (
-                            <button key={ex} onClick={() => setSkippedExercises(prev => prev.filter(e => e !== ex))} className="bg-slate-800 px-3 py-1 rounded-lg text-xs font-bold text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">+ {ex}</button>
-                        ))}
-                    </div>
-                </div>
-            )}
 
             <button onClick={finishWorkout} className="w-full py-6 rounded-2xl font-black text-2xl text-white shadow-lg shadow-cyan-900/20 hover:scale-[1.02] transition-transform" style={{ background: selected.color }}>
                 Finish Workout

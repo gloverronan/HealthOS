@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { generateGeminiContent } from '../../services/gemini';
 import { db } from '../../services/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -31,18 +32,8 @@ const GeminiFoodEntry = ({ isReady, userId, showToast, isConfigLoaded, selectedD
         if (!geminiKey) return showToast('AI Key Missing.', 'error');
         setLoading(true);
         try {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${geminiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: `Return ONLY valid JSON (no markdown): {"name":"string","cals":number,"prot":number,"carb":number,"fat":number}. Food: ${input}` }] }]
-                })
-            });
-
-            const data = await res.json();
-            const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-            if (!responseText) throw new Error('Empty response from AI.');
+            const prompt = `Return ONLY valid JSON (no markdown): {"name":"string","cals":number,"prot":number,"carb":number,"fat":number}. Food: ${input}`;
+            const responseText = await generateGeminiContent(geminiKey, prompt);
 
             const jsonString = responseText.trim().replace(/```json|```/g, '');
             const json = JSON.parse(jsonString);
@@ -100,7 +91,7 @@ const GeminiFoodEntry = ({ isReady, userId, showToast, isConfigLoaded, selectedD
 
     return (
         <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-6 mb-8 border border-slate-700">
-            <div className="flex gap-3 mb-4">
+            <div className="flex flex-col gap-3 mb-4">
                 <div className="flex-1 flex flex-col gap-2">
                     <input className="w-full bg-slate-950/70 border border-slate-700 rounded-xl px-5 py-4 text-lg placeholder-slate-500 focus:border-emerald-500 transition"
                         placeholder={isConfigLoaded ? "What did you eat?" : "Loading config..."}
@@ -115,18 +106,22 @@ const GeminiFoodEntry = ({ isReady, userId, showToast, isConfigLoaded, selectedD
                         </select>
                     </div>
                 </div>
-                <button onClick={analyze} disabled={loading || !isAiReady} className="bg-emerald-600 px-8 rounded-xl font-bold disabled:opacity-50 hover:bg-emerald-500 transition-colors h-auto">
-                    {loading ? '...' : (!isAiReady ? 'Wait...' : 'AI')}
+                <button onClick={analyze} disabled={loading || !isAiReady} className="w-full bg-emerald-600 py-3 rounded-xl font-bold disabled:opacity-50 hover:bg-emerald-500 transition-colors">
+                    {loading ? 'Thinking...' : (!isAiReady ? 'Wait...' : 'Generate Macros')}
                 </button>
             </div>
             {result && (
                 <div className="space-y-4 animate-in fade-in">
                     <div className="flex gap-4">
                         <input className="flex-[2] bg-transparent text-xl font-bold outline-none border-b border-slate-600" value={result.name} onChange={e => setResult({ ...result, name: e.target.value })} />
-                        <div className="flex-1 flex items-center gap-2 border-b border-slate-600">
+                        <div className="flex items-center gap-2 border-b border-slate-600 px-2">
                             <span className="text-slate-500 text-sm font-bold">Qty:</span>
-                            <input type="number" className="w-full bg-transparent text-xl font-bold outline-none text-center"
-                                value={quantity} onChange={e => handleQuantityChange(e.target.value)} />
+                            <div className="flex flex-col">
+                                <button onClick={() => handleQuantityChange(parseFloat(quantity) + 0.5)} className="text-xs hover:text-white text-slate-400">▲</button>
+                                <input type="number" className="w-12 bg-transparent text-lg font-bold outline-none text-center appearance-none"
+                                    value={quantity} onChange={e => handleQuantityChange(e.target.value)} />
+                                <button onClick={() => handleQuantityChange(Math.max(0.5, parseFloat(quantity) - 0.5))} className="text-xs hover:text-white text-slate-400">▼</button>
+                            </div>
                         </div>
                     </div>
                     <div className="grid grid-cols-4 gap-4">

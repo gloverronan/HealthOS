@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { db } from '../../services/firebase';
-import { doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { doc, deleteDoc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { getLocalISODate } from '../../utils/dateUtils';
 import NutrientLegend from './NutrientLegend';
-import GeminiFoodEntry from './GeminiFoodEntry';
+import FloatingFoodButton from './FloatingFoodButton';
 import EditFoodModal from './EditFoodModal';
 
 const FoodTab = ({ data, isReady, userId, showToast, isConfigLoaded, selectedDate, onSelectDate, geminiKey }) => {
@@ -29,11 +29,35 @@ const FoodTab = ({ data, isReady, userId, showToast, isConfigLoaded, selectedDat
                 prot: Number(updatedItem.prot) || 0,
                 carb: Number(updatedItem.carb) || 0,
                 fat: Number(updatedItem.fat) || 0,
+                time: updatedItem.time || null,
+                category: updatedItem.category || 'Snack'
             });
             setEditingItem(null);
             showToast('Item updated!', 'success');
         } catch (e) {
             showToast('Update failed.', 'error');
+            console.error(e);
+        }
+    };
+
+    const addFoodToLog = async (foodData) => {
+        if (!isReady || !userId) return showToast('Database not ready.', 'error');
+        try {
+            await addDoc(collection(db, 'users', userId, 'food_logs'), {
+                date: selectedDate,
+                timestamp: serverTimestamp(),
+                name: foodData.name,
+                cals: Number(foodData.cals) || 0,
+                prot: Number(foodData.prot) || 0,
+                carb: Number(foodData.carb) || 0,
+                fat: Number(foodData.fat) || 0,
+                quantity: Number(foodData.quantity) || 1,
+                time: foodData.time,
+                category: foodData.category
+            });
+            showToast('Food added!', 'success');
+        } catch (e) {
+            showToast('Failed to add food.', 'error');
             console.error(e);
         }
     };
@@ -89,7 +113,7 @@ const FoodTab = ({ data, isReady, userId, showToast, isConfigLoaded, selectedDat
             <div className="mb-8">
                 <NutrientLegend cals={data.totals.cals} prot={data.totals.prot} carb={data.totals.carb} fat={data.totals.fat} goals={data.goals || DEFAULT_GOALS} />
             </div>
-            <GeminiFoodEntry isReady={isReady} userId={userId} showToast={showToast} isConfigLoaded={isConfigLoaded} selectedDate={selectedDate} geminiKey={geminiKey} />
+
             <div className="space-y-4">
                 {!isReady && <div className="text-center text-slate-500 py-6">Waiting for Database connection...</div>}
                 {['Breakfast', 'Lunch', 'Dinner', 'Snack'].map(category => {
@@ -97,24 +121,51 @@ const FoodTab = ({ data, isReady, userId, showToast, isConfigLoaded, selectedDat
                     if (items.length === 0) return null;
 
                     return (
-                        <div key={category} className="space-y-3">
+                        <div
+                            key={category}
+                            className="space-y-3 min-h-[100px] p-2 rounded-2xl transition-colors"
+                            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('bg-slate-800/50'); }}
+                            onDragLeave={(e) => { e.currentTarget.classList.remove('bg-slate-800/50'); }}
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                e.currentTarget.classList.remove('bg-slate-800/50');
+                                const itemId = e.dataTransfer.getData('text/plain');
+                                const item = data.food.find(i => i.id === itemId);
+                                if (item && item.category !== category) {
+                                    updateFoodItem({ ...item, category });
+                                }
+                            }}
+                        >
                             <h3 className="text-xl font-bold text-slate-300 pl-1">{category}</h3>
                             {items.map(item => (
-                                <div key={item.id} onClick={() => setEditingItem(item)} className="bg-slate-900/80 backdrop-blur-xl rounded-xl p-5 flex justify-between items-center border border-slate-700 cursor-pointer hover:bg-slate-800 transition-colors">
+                                <div
+                                    key={item.id}
+                                    draggable
+                                    onDragStart={(e) => { e.dataTransfer.setData('text/plain', item.id); }}
+                                    onClick={() => setEditingItem(item)}
+                                    className="bg-slate-900/80 backdrop-blur-xl rounded-xl p-5 flex justify-between items-center border border-slate-700 cursor-pointer hover:bg-slate-800 transition-colors active:cursor-grabbing"
+                                >
                                     <div>
-                                        <div className="font-bold flex items-center gap-2">
+                                        <div className="font-bold flex items-center gap-2 text-lg">
                                             {item.name}
+                                            <span className="text-xs font-normal text-slate-500 bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800">{item.time || '—'}</span>
                                         </div>
-                                        <div className="text-sm text-slate-500">{item.prot}g P • {item.carb}g C • {item.fat}g F</div>
+                                        <div className="flex gap-3 mt-1 text-xs font-bold text-slate-400">
+                                            <span className="text-blue-400">{item.prot}p</span>
+                                            <span className="text-amber-400">{item.carb}c</span>
+                                            <span className="text-rose-400">{item.fat}f</span>
+                                        </div>
                                     </div>
-                                    <div className="text-right flex items-center gap-4">
-                                        <div className="flex items-center gap-2 bg-slate-950 rounded-lg p-1 border border-slate-800" onClick={e => e.stopPropagation()}>
-                                            <button onClick={() => adjustQuantity(item, -0.5)} className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 rounded">-</button>
-                                            <span className="text-xs font-bold text-slate-300 w-4 text-center">{item.quantity || 1}</span>
-                                            <button onClick={() => adjustQuantity(item, 0.5)} className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 rounded">+</button>
+                                    <div className="text-right flex items-center gap-3">
+                                        <div className="flex flex-col items-center bg-slate-950 rounded-lg border border-slate-800 px-1">
+                                            <button onClick={(e) => { e.stopPropagation(); adjustQuantity(item, 0.5); }} className="h-5 w-6 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 rounded-t text-[10px]">▲</button>
+                                            <span className="text-xs font-bold text-slate-300 w-6 text-center py-0.5 border-y border-slate-800">{item.quantity || 1}</span>
+                                            <button onClick={(e) => { e.stopPropagation(); adjustQuantity(item, -0.5); }} className="h-5 w-6 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 rounded-b text-[10px]">▼</button>
                                         </div>
-                                        <div className="text-2xl font-black text-emerald-400 w-16 text-right">{item.cals}</div>
-                                        <button onClick={(e) => { e.stopPropagation(); deleteFoodItem(item.id); }} className="text-red-500 text-lg hover:text-red-400 transition-colors">×</button>
+                                        <div className="text-xl font-black text-emerald-400 w-14 text-right">{item.cals}</div>
+                                        <button onClick={(e) => { e.stopPropagation(); deleteFoodItem(item.id); }} className="text-slate-600 hover:text-red-500 transition-colors p-1">
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                        </button>
                                     </div>
                                 </div>
                             ))}
@@ -122,6 +173,18 @@ const FoodTab = ({ data, isReady, userId, showToast, isConfigLoaded, selectedDat
                     );
                 })}
             </div>
+
+            {/* Floating Food Entry Button */}
+            <FloatingFoodButton
+                onAddFood={addFoodToLog}
+                todaysFoods={data.food}
+                todaysTotals={data.totals}
+                goals={data.goals || DEFAULT_GOALS}
+                gymData={data.gym || []}
+                cardioData={data.cardio || []}
+                geminiKey={geminiKey}
+                selectedDate={selectedDate}
+            />
         </>
     );
 };

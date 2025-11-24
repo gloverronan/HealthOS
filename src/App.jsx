@@ -4,6 +4,7 @@ import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { getLocalISODate } from './utils/dateUtils';
 import { loadItem, saveItem, loadKey, saveKey } from './utils/storageUtils';
+import { getExerciseLibrary, initializeExerciseLibrary } from './services/exerciseLibrary';
 
 // Components
 import AuthModal from './features/auth/AuthModal';
@@ -89,6 +90,7 @@ const App = () => {
         });
     });
     const [exerciseSettings, setExerciseSettings] = useState({});
+    const [exerciseLibrary, setExerciseLibrary] = useState([]);
     const [editingLog, setEditingLog] = useState(null);
     const [stats, setStats] = useState({});
     const [toast, setToast] = useState(null);
@@ -140,7 +142,19 @@ const App = () => {
             const workoutsDocRef = doc(db, 'users', uid, 'settings', 'workouts');
             const workoutsDocSnap = await getDoc(workoutsDocRef);
             if (workoutsDocSnap.exists()) {
-                setWorkouts(workoutsDocSnap.data().list);
+                const loadedWorkouts = workoutsDocSnap.data().list;
+                // Merge with defaults to ensure emojis are present
+                const mergedWorkouts = loadedWorkouts.map(w => {
+                    const def = DEFAULT_WORKOUTS.find(d => d.id === w.id);
+                    if (def) {
+                        return {
+                            ...w,
+                            emoji: w.emoji || def.emoji // Ensure emoji exists
+                        };
+                    }
+                    return w;
+                });
+                setWorkouts(mergedWorkouts);
             }
 
             // Load Stats
@@ -155,6 +169,19 @@ const App = () => {
             const exSettingsDocSnap = await getDoc(exSettingsDocRef);
             if (exSettingsDocSnap.exists()) {
                 setExerciseSettings(exSettingsDocSnap.data());
+            }
+
+            // Load Exercise Library (initialize if empty)
+            const library = await getExerciseLibrary(uid);
+            if (library.length === 0) {
+                // New user or needs migration - initialize with defaults or migrate from stats
+                const currentStats = statsDocSnap.exists() ? statsDocSnap.data() : {};
+                await initializeExerciseLibrary(uid, currentStats);
+                // Reload after initialization
+                const newLibrary = await getExerciseLibrary(uid);
+                setExerciseLibrary(newLibrary);
+            } else {
+                setExerciseLibrary(library);
             }
         } catch (e) {
             console.error("Error loading user settings:", e);
@@ -323,11 +350,12 @@ const App = () => {
                 setGoals={setGoals}
                 calendarView={calendarView}
                 setCalendarView={setCalendarView}
+                userId={userId}
             />
 
             <div className={!isAppUsable ? 'opacity-20 pointer-events-none' : ''}>
                 <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-5xl font-black">{tab === 'food' ? 'FOOD' : tab === 'activity' ? 'ACTIVITY' : 'SUMMARY'}</h1>
+                    <h1 className="text-5xl font-black">{tab === 'food' ? 'FOOD' : tab === 'activity' ? 'ACTIVITY' : <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600">HealthOS</span>}</h1>
 
                     <div className="flex items-center space-x-3">
                         {isLoggedIn && (
@@ -353,6 +381,7 @@ const App = () => {
                         onNavigate={setTab}
                         onSubNavigate={setActivitySubTab}
                         onSetEditingLog={setEditingLog}
+                        geminiKey={geminiKey}
                     />}
 
                     {tab === 'food' && <FoodTab
@@ -384,6 +413,8 @@ const App = () => {
                         setEditingLog={setEditingLog}
                         exerciseSettings={exerciseSettings}
                         setExerciseSettings={setExerciseSettings}
+                        exerciseLibrary={exerciseLibrary}
+                        setExerciseLibrary={setExerciseLibrary}
                     />}
                 </div>
 

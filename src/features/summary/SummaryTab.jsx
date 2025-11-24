@@ -1,8 +1,10 @@
 import React, { useMemo } from 'react';
 import Calendar from '../../components/ui/Calendar';
 import ActivityRings from '../../components/ui/ActivityRings';
+import NutrientLegend from '../food/NutrientLegend';
+import DailyInsight from './DailyInsight';
 
-const SummaryTab = ({ data, allFood, allGym, allCardio, selectedDate, onSelectDate, calendarView, onNavigate, onSubNavigate, onSetEditingLog }) => {
+const SummaryTab = ({ data, allFood, allGym, allCardio, selectedDate, onSelectDate, calendarView, onNavigate, onSubNavigate, onSetEditingLog, geminiKey }) => {
     const datesWithData = useMemo(() => {
         return [...new Set([...allFood.map(f => f.date), ...allGym.map(g => g.date), ...allCardio.map(c => c.date)])];
     }, [allFood, allGym, allCardio]);
@@ -26,22 +28,35 @@ const SummaryTab = ({ data, allFood, allGym, allCardio, selectedDate, onSelectDa
     const DEFAULT_GOALS = { calories: 2350, protein: 180, carbs: 250, fat: 80 };
 
     return (
-        <div className="space-y-6">
-            {/* Top: Calendar */}
-            <Calendar datesWithData={datesWithData} selectedDate={selectedDate} onSelect={onSelectDate} viewMode={calendarView} />
+        <>
+            {/* Floating Daily Insight Bubble */}
+            <DailyInsight data={{ ...dayData, goals: data.goals || DEFAULT_GOALS }} geminiKey={geminiKey} />
 
-            <div className="grid grid-cols-2 gap-4">
-                {/* Left: Rings (Food) */}
-                <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-4 border border-slate-700 flex flex-col items-center">
-                    <h3 className="text-lg font-bold mb-2 text-slate-300 self-start">Food</h3>
-                    <ActivityRings scale={0.65} cals={dayData.totals.cals} prot={dayData.totals.prot} carb={dayData.totals.carb} fat={dayData.totals.fat} goals={data.goals || DEFAULT_GOALS} />
+            <div className="space-y-6">
+                {/* Top: Calendar */}
+                <Calendar datesWithData={datesWithData} selectedDate={selectedDate} onSelect={onSelectDate} viewMode={calendarView} />
+
+                {/* Middle: Food Stats & Activity Rings */}
+                <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-3 border border-slate-700">
+                    <h3 className="text-lg font-bold mb-2 text-slate-300">Food</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                        {/* Left: Activity Rings */}
+                        <div className="flex justify-center items-center">
+                            <ActivityRings scale={0.5} showLegend={false} cals={dayData.totals.cals} prot={dayData.totals.prot} carb={dayData.totals.carb} fat={dayData.totals.fat} goals={data.goals || DEFAULT_GOALS} />
+                        </div>
+
+                        {/* Right: Nutrient Legend */}
+                        <div className="flex items-center">
+                            <NutrientLegend cals={dayData.totals.cals} prot={dayData.totals.prot} carb={dayData.totals.carb} fat={dayData.totals.fat} goals={data.goals || DEFAULT_GOALS} />
+                        </div>
+                    </div>
                 </div>
 
-                {/* Right: Activity Summary */}
-                <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-4 border border-slate-700 flex flex-col">
-                    <h3 className="text-lg font-bold mb-2 text-slate-300">Activity</h3>
-                    <div className="flex-1 space-y-3 overflow-y-auto max-h-48 pr-1 custom-scrollbar">
-                        {dayData.gym.length === 0 && dayData.cardio.length === 0 && <div className="text-slate-500 text-center py-8 text-sm">No activity.</div>}
+                {/* Bottom: Activity List */}
+                <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl p-4 border border-slate-700">
+                    <h3 className="text-lg font-bold mb-3 text-slate-300">Activity</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                        {dayData.gym.length === 0 && dayData.cardio.length === 0 && <div className="col-span-2 text-slate-500 text-center py-8 text-sm">No activity.</div>}
 
                         {dayData.gym.map(g => (
                             <div key={g.id} onClick={() => { onNavigate('activity'); onSubNavigate('gym'); onSetEditingLog(g); }} className="bg-slate-900/50 p-3 rounded-xl border-l-4 border-cyan-500 cursor-pointer hover:bg-slate-800 transition-colors">
@@ -62,10 +77,11 @@ const SummaryTab = ({ data, allFood, allGym, allCardio, selectedDate, onSelectDa
                                     </div>
                                 </div>
                             );
-                        })}</div>
+                        })}
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 };
 

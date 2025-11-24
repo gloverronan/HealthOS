@@ -39,6 +39,7 @@ const CardioTab = ({ isReady, userId, showToast, selectedDate, onSelectDate, ini
         if (type === 'run') calories = Math.round(dist * 100);
         else if (type === 'cycle') calories = Math.round(dist * 40);
         else if (type === 'swim') calories = Math.round(dist * 250);
+        else if (type === 'walk') calories = Math.round(dist * 60);
         else if (type === 'hike') calories = Math.round(dist * 70);
         else if (type === 'class') calories = Math.round(timeMin * 8);
 
@@ -110,6 +111,7 @@ const CardioTab = ({ isReady, userId, showToast, selectedDate, onSelectDate, ini
             <div className="space-y-6">
                 <select value={type} onChange={e => setType(e.target.value)} className="w-full bg-slate-900/80 rounded-xl px-6 py-4 text-lg font-bold border border-slate-700">
                     <option value="run">Running</option>
+                    <option value="walk">Walking</option>
                     <option value="cycle">Cycling</option>
                     <option value="swim">Swimming</option>
                     <option value="hike">Hiking</option>

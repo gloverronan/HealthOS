@@ -47,6 +47,28 @@ const EditFoodModal = ({ item, onClose, onSave }) => {
                 <h3 className="text-xl font-bold mb-6 text-white">Edit Entry</h3>
 
                 <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase">Time</label>
+                            <input
+                                type="time"
+                                value={edited.time || ''}
+                                onChange={e => setEdited({ ...edited, time: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white mt-1"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase">Category</label>
+                            <select
+                                value={edited.category || 'Snack'}
+                                onChange={e => setEdited({ ...edited, category: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white mt-1 appearance-none"
+                            >
+                                {['Breakfast', 'Lunch', 'Dinner', 'Snack'].map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
                     <div>
                         <label className="text-xs font-bold text-slate-500 uppercase">Name</label>
                         <input

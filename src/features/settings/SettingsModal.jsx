@@ -1,14 +1,44 @@
 import React, { useState, useEffect } from 'react';
 import Icon from '../../components/ui/Icon';
+import { db } from '../../services/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
-const SettingsModal = ({ isVisible, onClose, onSave, currentKey, goals, setGoals, calendarView, setCalendarView }) => {
+const SettingsModal = ({ isVisible, onClose, onSave, currentKey, goals, setGoals, calendarView, setCalendarView, userId }) => {
     const [key, setKey] = useState(currentKey);
     const [localGoals, setLocalGoals] = useState(goals);
+    const [isAdmin, setIsAdmin] = useState(false);
 
     useEffect(() => {
         setKey(currentKey);
         setLocalGoals(goals);
     }, [currentKey, goals]);
+
+    // Check if current user is admin
+    useEffect(() => {
+        const checkAdmin = async () => {
+            if (!userId) {
+                setIsAdmin(false);
+                return;
+            }
+
+            try {
+                const adminDocRef = doc(db, 'app_config', 'shared_keys');
+                const adminDocSnap = await getDoc(adminDocRef);
+
+                if (adminDocSnap.exists()) {
+                    const adminUID = adminDocSnap.data().adminUID;
+                    setIsAdmin(userId === adminUID);
+                }
+            } catch (error) {
+                console.error('Error checking admin status:', error);
+                setIsAdmin(false);
+            }
+        };
+
+        if (isVisible) {
+            checkAdmin();
+        }
+    }, [userId, isVisible]);
 
     const handleSaveGoals = () => {
         setGoals(localGoals);
@@ -54,19 +84,23 @@ const SettingsModal = ({ isVisible, onClose, onSave, currentKey, goals, setGoals
                     </div>
                 </div>
 
-                {/* API Key Section (Advanced) */}
-                <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pt-8 pb-2 text-red-400">Advanced</h3>
-                <div className="mb-6">
-                    <label className="block text-sm font-bold text-slate-400 mb-2">Gemini API Key (Shared)</label>
-                    <input
-                        type="password"
-                        value={key}
-                        onChange={e => setKey(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white font-mono text-sm focus:border-cyan-500 outline-none"
-                        placeholder="AIza..."
-                    />
-                    <p className="text-xs text-slate-500 mt-2">This key is shared across the app. Changing it affects all users.</p>
-                </div>
+                {/* API Key Section (Admin Only) */}
+                {isAdmin && (
+                    <>
+                        <h3 className="text-xl font-bold mb-4 border-b border-slate-700 pt-8 pb-2 text-red-400">Advanced (Admin Only)</h3>
+                        <div className="mb-6">
+                            <label className="block text-sm font-bold text-slate-400 mb-2">Gemini API Key (Shared)</label>
+                            <input
+                                type="password"
+                                value={key}
+                                onChange={e => setKey(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white font-mono text-sm focus:border-cyan-500 outline-none"
+                                placeholder="AIza..."
+                            />
+                            <p className="text-xs text-slate-500 mt-2">This key is shared across the app. Changing it affects all users.</p>
+                        </div>
+                    </>
+                )}
 
                 <div className="flex gap-3 mt-6">
                     <button onClick={onClose} className="flex-1 py-3 bg-slate-800 rounded-xl font-bold hover:bg-slate-700">Cancel</button>
