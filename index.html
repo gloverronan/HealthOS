@@ -106,9 +106,9 @@
     let GEMINI_KEY = ''; // Cloud managed
 
     const DEFAULT_WORKOUTS = [
-      { id: "push", name: "Push", color: "#ec4899", exercises: ["Bench Press", "Overhead Press", "Tricep Extensions"] },
-      { id: "legs", name: "Legs", color: "#3b82f6", exercises: ["Squat", "Romanian Deadlift", "Calf Raises"] },
-      { id: "pull", name: "Pull", color: "#10b981", exercises: ["Pull-ups", "Barbell Row", "Bicep Curls"] }
+      { id: "push", name: "Push", color: "#ec4899", exercises: ["Bench Press", "Overhead Press", "Incline Dumbbell Press", "Lateral Raises", "Tricep Pushdowns", "Skullcrushers"] },
+      { id: "legs", name: "Legs", color: "#3b82f6", exercises: ["Squat", "Romanian Deadlift", "Leg Press", "Leg Extensions", "Hamstring Curls", "Calf Raises"] },
+      { id: "pull", name: "Pull", color: "#10b981", exercises: ["Pull-ups", "Barbell Row", "Lat Pulldowns", "Face Pulls", "Bicep Curls", "Hammer Curls"] }
     ];
 
     // --- FIREBASE GLOBALS ---
@@ -1094,8 +1094,14 @@
                     {Object.entries(logData[ex] || {}).sort(([a], [b]) => Number(a) - Number(b)).map(([setId, set], i) => (
                       <div key={setId} className="grid grid-cols-[auto_1fr_1fr_auto] gap-3 items-center">
                         <div className="w-6 text-center text-slate-500 font-bold">{i + 1}</div>
-                        <input type="number" placeholder={isBodyweight ? "0" : "kg"} value={set.w} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [setId]: { ...set, w: e.target.value } } }))} className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-center font-bold text-white focus:border-cyan-500 outline-none transition-colors" />
-                        <input type="number" placeholder="0" value={set.r} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [setId]: { ...set, r: e.target.value } } }))} className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-center font-bold text-white focus:border-cyan-500 outline-none transition-colors" />
+                        {!isBodyweight ? (
+                          <input key="weight" type="number" placeholder="kg" value={set.w} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [setId]: { ...set, w: e.target.value } } }))}
+                            className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-center font-bold text-white focus:border-cyan-500 outline-none transition-colors" />
+                        ) : (
+                          <div className="text-center text-slate-600 font-bold text-sm py-3">BW</div>
+                        )}
+                        <input key="reps" type="number" placeholder="0" value={set.r} onChange={e => setLogData(prev => ({ ...prev, [ex]: { ...prev[ex], [setId]: { ...set, r: e.target.value } } }))}
+                          className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-center font-bold text-white focus:border-cyan-500 outline-none transition-colors" />
                         <button onClick={() => {
                           const newSets = { ...logData[ex] };
                           delete newSets[setId];
