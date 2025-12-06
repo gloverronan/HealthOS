@@ -41,8 +41,14 @@ const SettingsModal = ({ isVisible, onClose, onSave, currentKey, goals, setGoals
     }, [userId, isVisible]);
 
     const handleSaveGoals = () => {
-        setGoals(localGoals);
-        onSave(key); // Also save key if changed
+        // Ensure all values are numbers before saving
+        const sanitizedGoals = Object.entries(localGoals).reduce((acc, [k, v]) => ({
+            ...acc,
+            [k]: v === '' ? 0 : Number(v)
+        }), {});
+
+        setGoals(sanitizedGoals);
+        onSave(key, sanitizedGoals); // Save key and goals
     };
 
     if (!isVisible) return null;
@@ -58,7 +64,12 @@ const SettingsModal = ({ isVisible, onClose, onSave, currentKey, goals, setGoals
                     {Object.entries(localGoals).map(([k, v]) => (
                         <div key={k}>
                             <label className="text-sm text-slate-400 uppercase">{k === 'calories' ? 'Calories' : `${k} (g)`}</label>
-                            <input type="number" value={v} onChange={e => setLocalGoals(prev => ({ ...prev, [k]: Number(e.target.value) }))} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-700 mt-2" />
+                            <input
+                                type="number"
+                                value={v}
+                                onChange={e => setLocalGoals(prev => ({ ...prev, [k]: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                className="w-full bg-slate-950 p-3 rounded-xl border border-slate-700 mt-2"
+                            />
                         </div>
                     ))}
                     <button onClick={handleSaveGoals} className="w-full py-3 bg-emerald-600 rounded-xl font-bold text-lg hover:bg-emerald-500 transition-colors mt-4">Save My Goals</button>

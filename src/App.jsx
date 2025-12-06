@@ -13,6 +13,7 @@ import FloatingMenu from './components/layout/FloatingMenu';
 import SummaryTab from './features/summary/SummaryTab';
 import FoodTab from './features/food/FoodTab';
 import ActivityTab from './features/activity/ActivityTab';
+import OnboardingModal from './features/onboarding/OnboardingModal';
 
 const DEFAULT_GOALS = { calories: 2350, protein: 180, carbs: 250, fat: 80 };
 
@@ -95,6 +96,7 @@ const App = () => {
     const [stats, setStats] = useState({});
     const [toast, setToast] = useState(null);
     const [showSettings, setShowSettings] = useState(false);
+    const [showOnboarding, setShowOnboarding] = useState(false);
 
     // Persistence States
     const [isDbInitialized, setIsDbInitialized] = useState(false);
@@ -136,7 +138,11 @@ const App = () => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 if (data.goals) setGoals({ ...DEFAULT_GOALS, ...data.goals });
+            } else {
+                // Profile doesn't exist -> Show Onboarding
+                setShowOnboarding(true);
             }
+
 
             // Load Workouts
             const workoutsDocRef = doc(db, 'users', uid, 'settings', 'workouts');
@@ -300,22 +306,64 @@ const App = () => {
         return { food, gym, cardio, totals, goals };
     }, [foodLog, gymLog, cardioLog, selectedDate, goals]);
 
-    const handleSettingsSave = (newKey, msg, type) => {
+    const handleSettingsSave = async (newKey, newGoals) => {
         setGeminiKey(newKey);
         saveKey('hos_gemini_key', newKey);
 
-        if (auth.currentUser && newKey !== geminiKey) {
-            saveSharedConfig(newKey);
+        if (auth.currentUser) {
+            // Save Shared Config (API Key) if changed
+            if (newKey !== geminiKey) {
+                saveSharedConfig(newKey);
+            }
+
+            // Save User Goals if provided
+            if (newGoals) {
+                try {
+                    await setDoc(doc(db, 'users', userId, 'settings', 'profile'), {
+                        goals: newGoals,
+                        updatedAt: serverTimestamp()
+                    }, { merge: true });
+                    showToast('Goals saved successfully!', 'success');
+                } catch (e) {
+                    console.error("Error saving goals:", e);
+                    showToast('Failed to save goals.', 'error');
+                }
+            } else if (newKey !== geminiKey) {
+                // Toast handled in saveSharedConfig
+            } else {
+                showToast('Settings saved.', 'success');
+            }
+        } else {
+            showToast('Settings saved locally.', 'success');
         }
 
         setShowSettings(false);
-        showToast(msg, type);
     };
 
     const handleLogout = async () => {
         await signOut(auth);
         setUserId(null);
         showToast('Logged out.', 'success');
+    };
+
+    const handleOnboardingSave = async (data) => {
+        if (!userId) return;
+
+        try {
+            // Save Profile & Goals
+            await setDoc(doc(db, 'users', userId, 'settings', 'profile'), {
+                ...data.profile,
+                goals: data.goals,
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+
+            setGoals(data.goals);
+            setShowOnboarding(false);
+            showToast('Profile created successfully!', 'success');
+        } catch (e) {
+            console.error("Error saving onboarding:", e);
+            showToast('Failed to save profile.', 'error');
+        }
     };
 
     const isAppUsable = isReady;
@@ -340,6 +388,12 @@ const App = () => {
                     <AuthModal showToast={showToast} />
                 </div>
             )}
+
+            <OnboardingModal
+                isVisible={showOnboarding}
+                onSave={handleOnboardingSave}
+                geminiKey={geminiKey}
+            />
 
             <SettingsModal
                 isVisible={showSettings}
