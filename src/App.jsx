@@ -304,7 +304,7 @@ const App = () => {
         setGeminiKey(newKey);
         saveKey('hos_gemini_key', newKey);
 
-        if (auth.currentUser) {
+        if (auth.currentUser && newKey !== geminiKey) {
             saveSharedConfig(newKey);
         }
 
